@@ -1,0 +1,6 @@
+@'
+{
+  "min_required_version": "1.0.0",
+  "latest_version": "1.0.0"
+}
+'@ | Set-Content -Encoding UTF8 .\version_policy.json
