@@ -7,4 +7,4 @@ Latest version: 1.0.0
 
 BetonCheck is free to use and released under the MIT license.
 
-All credits and authorship belong to the author of BetonCheck: Miha Koplan
+All credits and authorship belong to the authors of BetonCheck.
