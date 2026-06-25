@@ -1,0 +1,27 @@
+BETONCHECK - LICENCNI POGOJI UPORABE
+
+1. LICENCA
+Program BetonCheck je licencirana programska oprema. Uporabnik z nakupom ali prejemom licencnega kljuca pridobi neizkljucno, neprenosljivo pravico do uporabe programa v obsegu kupljene licence.
+
+2. OMEJITVE
+Brez pisnega dovoljenja avtorja ni dovoljeno kopiranje, nadaljnja distribucija, prodaja, oddajanje, spreminjanje, odstranjevanje zascite, dekompilacija, obratno inzenirstvo ali poskus pridobitve izvorne kode oziroma nezasifriranih modulov, razen kjer to izrecno dovoljuje veljavna zakonodaja.
+
+3. LICENCNO PREVERJANJE
+Program lahko ob zagonu ali med uporabo preverja veljavnost licence preko internetne povezave. Licenca je lahko casovno omejena in lahko velja samo za izbrane module.
+
+4. UPORABA NA LASTNO ODGOVORNOST
+Program je strokovno racunsko orodje. Uporabnik je dolzan preveriti vhodne podatke, rezultate, veljavne standarde, tehnicne predpise in projektantske odlocitve. Koncna odgovornost za projektno dokumentacijo, izracune in izvedene resitve je vedno na uporabniku oziroma odgovornem projektantu.
+
+5. IZKLJUCITEV ODGOVORNOSTI
+V najvecjem obsegu, ki ga dovoljuje veljavna zakonodaja, avtor ne odgovarja za neposredno, posredno, materialno, nematerialno, posledicno ali kakrsnokoli drugo skodo, izgubo podatkov, izgubo dobicka, napake v projektni dokumentaciji, zamude, stroske odprave napak ali skodo, nastalo zaradi uporabe ali nezmoznosti uporabe programa.
+
+6. INTELEKTUALNA LASTNINA
+Vsa izvorna koda, algoritmi, Excel predloge, zasnova, dokumentacija, grafika in drugi sestavni deli programa so avtorsko delo in ostanejo last avtorja. Nakup licence ne pomeni prenosa avtorskih ali lastninskih pravic.
+
+7. POSODOBITVE
+Avtor si pridruzuje pravico do sprememb, popravkov, izboljsav, odstranitve ali dodajanja funkcionalnosti ter sprememb licencnega sistema.
+
+8. SPREJEM POGOJEV
+Z namestitvijo, zagonom ali uporabo programa uporabnik potrjuje, da je pogoje prebral, jih razumel in se z njimi strinja.
+
+© 2026 BetonCheck. Vse pravice pridrzane.
