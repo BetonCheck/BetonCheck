@@ -27,6 +27,8 @@ from betoncheck_customer.module_manager import (
     ModuleItem,
 )
 from betoncheck_customer.excel_launcher import open_encrypted_excel
+from betoncheck_customer.key_decryption import decrypt_module_key
+from betoncheck_customer.settings import LAUNCHER_PRIVATE_KEY_PATH
 from betoncheck_customer.updater import check_for_update
 
 
@@ -145,10 +147,22 @@ class MainWindow(QWidget):
         module_keys: dict[str, str] = {}
 
         for module_id, module_data in modules.items():
-            module_key = module_data.get("key")
+            encrypted_key = module_data.get("encrypted_key")
 
-            if isinstance(module_key, str) and module_key.strip():
-                module_keys[module_id] = module_key.strip()
+            if not isinstance(encrypted_key, str) or not encrypted_key.strip():
+                continue
+
+            try:
+                module_key = decrypt_module_key(
+                    encrypted_key,
+                    LAUNCHER_PRIVATE_KEY_PATH,
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Ključa za modul '{module_id}' ni bilo mogoče dešifrirati: {exc}"
+                ) from exc
+
+            module_keys[module_id] = module_key
 
         return module_keys
 

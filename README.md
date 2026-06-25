@@ -16,11 +16,11 @@ V `betoncheck_customer/settings.py` nastavi:
 - `LICENSE_URL`
 - `MODULES_URL`
 - `UPDATES_URL`
-- `APP_SECRET`
 
 V `config/` dodaj:
 
 - `public_key.pem`
+- `launcher_private_key.pem`
 
 ## Kako deluje
 

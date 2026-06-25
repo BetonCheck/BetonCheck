@@ -18,3 +18,4 @@ UPDATES_URL = "https://raw.githubusercontent.com/BetonCheck/BetonCheckLicense/re
 PUBLIC_KEY_PATH = CONFIG_DIR / "public_key.pem"
 SETTINGS_PATH = CONFIG_DIR / "settings.json"
 LOCAL_LICENSE_KEY_PATH = CONFIG_DIR / "license_key.txt"
+LAUNCHER_PRIVATE_KEY_PATH = CONFIG_DIR / "launcher_private_key.pem"
