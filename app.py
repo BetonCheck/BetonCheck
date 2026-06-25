@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from typing import Any
 
 from PySide6.QtWidgets import (
     QApplication,
@@ -83,6 +84,7 @@ class MainWindow(QWidget):
 
         self.license_result = None
         self.items: list[ModuleItem] = []
+        self.module_keys: dict[str, str] = {}
 
         self.info = QLabel("Vnesite licenčni ključ in kliknite Aktiviraj.")
 
@@ -131,11 +133,24 @@ class MainWindow(QWidget):
             self.open_btn.setEnabled(False)
             return
 
+        self.module_keys = self.extract_module_keys(result.modules or {})
+
         self.info.setText(
             f"Licenca: {result.customer} | velja do {result.valid_until}"
         )
 
-        self.load_items(result.modules or [])
+        self.load_items(list(self.module_keys.keys()))
+
+    def extract_module_keys(self, modules: dict[str, dict[str, Any]]) -> dict[str, str]:
+        module_keys: dict[str, str] = {}
+
+        for module_id, module_data in modules.items():
+            module_key = module_data.get("key")
+
+            if isinstance(module_key, str) and module_key.strip():
+                module_keys[module_id] = module_key.strip()
+
+        return module_keys
 
     def load_items(self, modules: list[str]):
         self.list_widget.clear()
@@ -148,7 +163,10 @@ class MainWindow(QWidget):
         self.open_btn.setEnabled(bool(self.items))
 
         if not self.items:
-            self.info.setText("Licenca je veljavna, vendar nima dodeljenih modulov.")
+            self.info.setText(
+                "Licenca je veljavna, vendar nima dodeljenih modulov "
+                "ali pa moduli nimajo veljavnih ključev."
+            )
 
     def open_selected(self):
         row = self.list_widget.currentRow()
@@ -159,6 +177,16 @@ class MainWindow(QWidget):
 
         item = self.items[row]
 
+        module_key = self.module_keys.get(item.module_id)
+
+        if not module_key:
+            QMessageBox.critical(
+                self,
+                "Licenca",
+                f"Licenca ne vsebuje ključa za modul: {item.module_id}",
+            )
+            return
+
         try:
             self.info.setText(f"Prenašam modul: {item.title} ...")
             QApplication.processEvents()
@@ -168,7 +196,7 @@ class MainWindow(QWidget):
             self.info.setText(f"Odpiram modul: {item.title} ...")
             QApplication.processEvents()
 
-            open_encrypted_excel(encrypted_path)
+            open_encrypted_excel(encrypted_path, module_key)
 
             self.info.setText(f"Odprt modul: {item.title}")
 
@@ -182,7 +210,7 @@ class MainWindow(QWidget):
 
     def check_updates(self):
         try:
-            has_update, message = check_for_update()
+            _has_update, message = check_for_update()
             QMessageBox.information(self, "Posodobitve", message)
         except Exception as exc:
             QMessageBox.critical(

@@ -1,17 +1,28 @@
 from __future__ import annotations
 
-import base64
-import hashlib
 from pathlib import Path
-from cryptography.fernet import Fernet
+
+from cryptography.fernet import Fernet, InvalidToken
 
 
-def derive_fernet_key(secret: str) -> bytes:
-    digest = hashlib.sha256(secret.encode("utf-8")).digest()
-    return base64.urlsafe_b64encode(digest)
+def decrypt_file(
+    source: Path,
+    target: Path,
+    module_key: str | bytes,
+) -> None:
 
-
-def decrypt_file(source: Path, target: Path, secret: str) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
-    fernet = Fernet(derive_fernet_key(secret))
-    target.write_bytes(fernet.decrypt(source.read_bytes()))
+
+    if isinstance(module_key, str):
+        module_key = module_key.encode("utf-8")
+
+    try:
+        fernet = Fernet(module_key)
+        decrypted = fernet.decrypt(source.read_bytes())
+
+    except InvalidToken as exc:
+        raise RuntimeError(
+            "Nepravilen ključ za modul ali poškodovana .bckx datoteka."
+        ) from exc
+
+    target.write_bytes(decrypted)
