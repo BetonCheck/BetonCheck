@@ -11,9 +11,9 @@ CACHE_DIR = ROOT / "cache"
 TEMP_DIR = ROOT / "temp"
 LOGS_DIR = ROOT / "logs"
 
-LICENSE_URL = "https://github.com/BetonCheck/BetonCheckLicense/blob/master/licenses_signed.json"
-MODULES_URL = "https://github.com/BetonCheck/BetonCheckLicense/blob/master/modules.json"
-UPDATES_URL = "https://github.com/BetonCheck/BetonCheckLicense/blob/master/updates.json"
+LICENSE_URL = "https://raw.githubusercontent.com/BetonCheck/BetonCheckLicense/refs/heads/master/licenses_signed.json"
+MODULES_URL = "https://raw.githubusercontent.com/BetonCheck/BetonCheckLicense/refs/heads/master/modules.json"
+UPDATES_URL = "https://raw.githubusercontent.com/BetonCheck/BetonCheckLicense/refs/heads/master/updates.json" \
 
 PUBLIC_KEY_PATH = CONFIG_DIR / "public_key.pem"
 SETTINGS_PATH = CONFIG_DIR / "settings.json"
