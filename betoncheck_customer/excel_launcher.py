@@ -19,6 +19,4 @@ def open_encrypted_excel(encrypted_path: Path) -> None:
     else:
         subprocess.Popen(["xdg-open", str(temp_xlsx)])
 
-    # Datoteke ni mogoce zanesljivo izbrisati, dokler je odprta v Excelu.
-    # Ob naslednjih zagonih lahko temp mapo ocistis ali uporabis background cleanup.
     time.sleep(1)
