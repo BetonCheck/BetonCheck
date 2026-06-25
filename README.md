@@ -1,7 +1,5 @@
 # BetonCheck Launcher
 
-BetonCheck Launcher je aplikacija za kupce. Preveri licenco, prikaze dovoljene module in po potrebi prenese ter odpre Excel kontrole.
-
 ## Namestitev za razvoj
 
 ```powershell
@@ -31,5 +29,5 @@ V `config/` dodaj:
 3. Launcher prenese `licenses_signed.json`.
 4. Preveri digitalni podpis z `public_key.pem`.
 5. Preveri datum veljavnosti in dovoljene module.
-6. Prenese potrebne `.bckx` datoteke.
+6. Prenese potrebno `.bckx` datoteko.
 7. Izbrani Excel se odpre.
