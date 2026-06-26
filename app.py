@@ -997,7 +997,7 @@ class MainWindow(QWidget):
             )
 
     def refresh_project_tree(self) -> None:
-        expanded_keys = self.get_project_tree_expanded_state()
+        expanded_keys, selected_key, selected_module_id, selected_calc_index = self.get_project_tree_state()
         self.project_tree.clear()
         self.calculations = []
 
@@ -1006,24 +1006,24 @@ class MainWindow(QWidget):
 
         self.calculations = list_calculations(self.current_project)
 
-        project_root = QTreeWidgetItem([self.current_project.name, "", ""])
+        project_root = QTreeWidgetItem([self.current_project.name])
         project_root.setIcon(0, self.folder_icon)
-        project_key = f"project_root:{project_root.text(0)}"
-        project_root.setExpanded(project_key in expanded_keys or not expanded_keys)
+        project_root.setExpanded(True)
         project_root.setFont(0, QFont("Segoe UI", 11, QFont.Bold))
         project_root.setData(0, Qt.UserRole, {"type": "project_root"})
         self.project_tree.addTopLevelItem(project_root)
 
         modules_by_id: dict[str, QTreeWidgetItem] = {}
+        selected_restored = False
 
         for index, calculation in enumerate(self.calculations):
             module_parent = modules_by_id.get(calculation.module_id)
 
             if module_parent is None:
                 module_title = getattr(calculation, "module_title", calculation.module_id)
-                module_parent = QTreeWidgetItem([module_title, "", ""])
+                module_parent = QTreeWidgetItem([module_title])
                 module_parent.setIcon(0, self.folder_icon)
-                module_key = f"project_module:{module_title}"
+                module_key = f"project_module:{calculation.module_id}"
                 module_parent.setExpanded(module_key in expanded_keys)
                 module_parent.setFont(0, QFont("Segoe UI", 10, QFont.Bold))
                 module_parent.setData(
@@ -1043,9 +1043,31 @@ class MainWindow(QWidget):
                 {
                     "type": "calculation",
                     "index": index,
+                    "module_id": calculation.module_id,
+                    "path": str(calculation.path),
                 },
             )
             module_parent.addChild(child)
+
+            module_key = f"project_module:{calculation.module_id}"
+            if module_key in expanded_keys:
+                module_parent.setExpanded(True)
+
+            if selected_key == f"calculation:{calculation.path}" or (
+                selected_calc_index == index and selected_module_id == calculation.module_id
+            ):
+                self.project_tree.setCurrentItem(child)
+                selected_restored = True
+
+        project_root.setExpanded(True)
+
+        if not selected_restored:
+            if selected_key == "project_root":
+                self.project_tree.setCurrentItem(project_root)
+            elif selected_module_id is not None:
+                selected_module_item = modules_by_id.get(selected_module_id)
+                if selected_module_item is not None:
+                    self.project_tree.setCurrentItem(selected_module_item)
 
         self.context_project_label.setText(f"Projekt: {self.current_project.name}")
         self.context_license_label.setText(
@@ -1105,6 +1127,7 @@ class MainWindow(QWidget):
             )
 
             self.refresh_project_tree()
+            self.expand_and_select_calculation(calculation)
             self.set_status_message(f"Ustvarjena kontrola: {calculation.name}")
             self.open_calculation_with_dialog(calculation, module_key)
 
@@ -1405,21 +1428,48 @@ class MainWindow(QWidget):
         self.set_status_message(f"Končno poročilo je bilo ustvarjeno: {output_pdf}")
         self.open_file(output_pdf)
 
-    def get_project_tree_expanded_state(self) -> set[str]:
+    def get_project_tree_state(self) -> tuple[set[str], str | None, str | None, int | None]:
         expanded_keys: set[str] = set()
+        selected_key: str | None = None
+        selected_module_id: str | None = None
+        selected_calc_index: int | None = None
+
+        current = self.project_tree.currentItem()
+        if current is not None:
+            data = current.data(0, Qt.UserRole) or {}
+            item_type = data.get("type", "")
+            selected_key = self.project_tree_item_key(current)
+            if item_type == "calculation":
+                selected_calc_index = data.get("index")
+                selected_module_id = data.get("module_id")
+            elif item_type == "project_module":
+                selected_module_id = data.get("module_id")
 
         def walk(item: QTreeWidgetItem) -> None:
             for i in range(item.childCount()):
                 child = item.child(i)
-                data = child.data(0, Qt.UserRole) or {}
-                item_type = data.get("type", "")
-                key = f"{item_type}:{child.text(0)}"
+                key = self.project_tree_item_key(child)
                 if child.isExpanded():
                     expanded_keys.add(key)
                 walk(child)
 
         walk(self.project_tree.invisibleRootItem())
-        return expanded_keys
+        return expanded_keys, selected_key, selected_module_id, selected_calc_index
+
+    def project_tree_item_key(self, item: QTreeWidgetItem) -> str:
+        data = item.data(0, Qt.UserRole) or {}
+        item_type = data.get("type", "")
+
+        if item_type == "project_root":
+            return "project_root"
+
+        if item_type == "project_module":
+            return f"project_module:{data.get('module_id', item.text(0))}"
+
+        if item_type == "calculation":
+            return f"calculation:{data.get('path', item.text(0))}"
+
+        return f"{item_type}:{item.text(0)}"
 
     def get_selected_calculation(self) -> Calculation | None:
         item = self.project_tree.currentItem()
@@ -1518,6 +1568,30 @@ class MainWindow(QWidget):
                     f"Kontrole ni bilo mogoče odpreti:\n{exc}",
                 )
             return
+
+    def expand_and_select_calculation(self, calculation: Calculation) -> None:
+        root = self.project_tree.topLevelItem(0)
+        if root is None:
+            return
+
+        root.setExpanded(True)
+
+        for i in range(root.childCount()):
+            module_item = root.child(i)
+            data = module_item.data(0, Qt.UserRole) or {}
+            if data.get("type") != "project_module":
+                continue
+
+            if data.get("module_id") != calculation.module_id:
+                continue
+
+            module_item.setExpanded(True)
+            for j in range(module_item.childCount()):
+                child = module_item.child(j)
+                child_data = child.data(0, Qt.UserRole) or {}
+                if child_data.get("type") == "calculation" and child.text(0) == calculation.name:
+                    self.project_tree.setCurrentItem(child)
+                    return
 
 
     def open_file(self, path: Path) -> None:

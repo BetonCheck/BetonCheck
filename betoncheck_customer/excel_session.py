@@ -164,8 +164,15 @@ excelApp.DisplayAlerts = False
 
 foundWorkbook = False
 
+Sub ApplyA4PageSetup(workbook)
+    For Each worksheet In workbook.Worksheets
+        worksheet.PageSetup.PaperSize = 9
+    Next
+End Sub
+
 For Each workbook In excelApp.Workbooks
     If LCase(workbook.FullName) = LCase("{_escape_vb_string(str(export_temp))}") Then
+        ApplyA4PageSetup workbook
         workbook.ExportAsFixedFormat 0, "{_escape_vb_string(str(pdf_path))}"
         foundWorkbook = True
         Exit For
@@ -174,6 +181,7 @@ Next
 
 If Not foundWorkbook Then
     Set workbook = excelApp.Workbooks.Open("{_escape_vb_string(str(export_temp))}")
+    ApplyA4PageSetup workbook
     workbook.ExportAsFixedFormat 0, "{_escape_vb_string(str(pdf_path))}"
     workbook.Close False
 End If

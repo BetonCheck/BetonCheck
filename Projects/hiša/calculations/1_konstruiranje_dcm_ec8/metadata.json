@@ -1,0 +1,12 @@
+{
+  "name": "1 - Konstruiranje_DCM_EC8",
+  "module_id": "column_design",
+  "module_title": "Preračun stebrov",
+  "item_id": "konstruiranje_dcm_ec8",
+  "title": "Konstruiranje_DCM_EC8",
+  "created_at": "2026-06-26T15:09:14",
+  "updated_at": "2026-06-26T15:09:14",
+  "work_file": "calculation.bckwork",
+  "template_file": "template.bckwork",
+  "reports_dir": "reports"
+}

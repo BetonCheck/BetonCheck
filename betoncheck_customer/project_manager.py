@@ -11,6 +11,8 @@ from .crypto_vault import decrypt_file, encrypt_file
 from .module_manager import ModuleItem
 from .settings import PROJECTS_DIR, TEMP_DIR
 
+NUMBER_PREFIX_RE = re.compile(r"^\s*(\d+)(?:\.(\d+))?\s+-\s+")
+
 
 @dataclass
 class Project:
@@ -107,19 +109,67 @@ def list_calculations(project: Project) -> list[Calculation]:
             )
         )
 
-    return result
+    return sorted(result, key=calculation_sort_key)
+
+
+def calculation_sort_key(calculation: Calculation) -> tuple[str, str, str, int, int, str]:
+    major, minor = parse_calculation_number(calculation.name)
+
+    return (
+        calculation.module_title.casefold(),
+        calculation.module_id.casefold(),
+        calculation.title.casefold(),
+        major or 999999,
+        minor or 999999,
+        calculation.name.casefold(),
+    )
+
+
+def parse_calculation_number(name: str) -> tuple[int | None, int | None]:
+    match = NUMBER_PREFIX_RE.match(name)
+    if match is None:
+        return None, None
+
+    major = int(match.group(1))
+    minor_text = match.group(2)
+    minor = int(minor_text) if minor_text is not None else None
+
+    return major, minor
 
 
 def generate_calculation_name(project: Project, item: ModuleItem) -> str:
-    existing = [
+    calculations = list_calculations(project)
+    existing_same_item = [
         calc
-        for calc in list_calculations(project)
+        for calc in calculations
         if calc.item_id == item.item_id
     ]
 
-    default_number = len(existing) + 1
+    existing_group_numbers = [
+        major
+        for major, _minor in (
+            parse_calculation_number(calc.name)
+            for calc in existing_same_item
+        )
+        if major is not None
+    ]
 
-    return f"{default_number} - {item.title}"
+    if existing_group_numbers:
+        group_number = min(existing_group_numbers)
+    else:
+        used_group_numbers = [
+            major
+            for major, _minor in (
+                parse_calculation_number(calc.name)
+                for calc in calculations
+            )
+            if major is not None
+        ]
+        group_number = max(used_group_numbers, default=0) + 1
+
+    item_number = len(existing_same_item) + 1
+
+    return f"{group_number}.{item_number} - {item.title}"
 
 
 def create_calculation_from_template(

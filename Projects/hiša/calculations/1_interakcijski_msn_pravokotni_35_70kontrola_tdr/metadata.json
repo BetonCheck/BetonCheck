@@ -1,0 +1,12 @@
+{
+  "name": "1 - interakcijski_MSN_pravokotni 35_70+kontrola TDR",
+  "module_id": "column_design",
+  "module_title": "Preračun stebrov",
+  "item_id": "interakcijski_msn_pravokotni_35_70kontrola_tdr",
+  "title": "interakcijski_MSN_pravokotni 35_70+kontrola TDR",
+  "created_at": "2026-06-26T14:56:35",
+  "updated_at": "2026-06-26T14:56:35",
+  "work_file": "calculation.bckwork",
+  "template_file": "template.bckwork",
+  "reports_dir": "reports"
+}
