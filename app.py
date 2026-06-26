@@ -60,6 +60,7 @@ from betoncheck_customer.project_manager import (
     create_calculation_from_template,
     generate_calculation_name,
     rename_calculation,
+    reset_calculation,
     delete_calculation,
 )
 from betoncheck_customer.excel_session import (
@@ -1359,7 +1360,7 @@ class MainWindow(QWidget):
             return
 
         try:
-            from pypdf import PdfMerger
+            from pypdf import PdfWriter
         except ImportError:
             QMessageBox.critical(
                 self,
@@ -1374,11 +1375,11 @@ class MainWindow(QWidget):
             return
 
         output_pdf = reports_dir / "koncno_porocilo.pdf"
-        merger = PdfMerger()
+        writer = PdfWriter()
 
         intro_path = reports_dir / "00_uvodna_stran.pdf"
         if intro_path.exists():
-            merger.append(str(intro_path))
+            writer.append(str(intro_path))
 
         pdf_files = sorted(
             p
@@ -1387,11 +1388,11 @@ class MainWindow(QWidget):
         )
 
         for pdf_file in pdf_files:
-            merger.append(str(pdf_file))
+            writer.append(str(pdf_file))
 
         try:
-            merger.write(str(output_pdf))
-            merger.close()
+            with output_pdf.open("wb") as output_file:
+                writer.write(output_file)
         except Exception as exc:
             QMessageBox.critical(
                 self,
@@ -1636,7 +1637,6 @@ class MainWindow(QWidget):
                 self.set_status_message(
                     f"Kontrola '{calculation.name}' je bila shranjena po zaprtju Excela."
                 )
-                self.refresh_project_tree()
             except Exception as exc:
                 QMessageBox.critical(
                     self,
@@ -1653,7 +1653,6 @@ class MainWindow(QWidget):
             self.set_status_message(
                 f"Spremembe za kontrolo '{calculation.name}' niso bile shranjene."
             )
-            self.refresh_project_tree()
 
     def save_calculation_item(self, calculation: Calculation) -> None:
         module_key = self.module_keys.get(calculation.module_id)

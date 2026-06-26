@@ -1,3 +1,5 @@
 cryptography
 requests
 PySide6
+reportlab
+pypdf
