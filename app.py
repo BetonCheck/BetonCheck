@@ -134,12 +134,16 @@ class InfoDialog(QDialog):
         self.update_button = QPushButton("Preveri posodobitve")
         self.update_button.clicked.connect(self.on_check_updates)
 
+        self.refresh_license_button = QPushButton("Preberi licenco")
+        self.refresh_license_button.clicked.connect(self.on_refresh_license)
+
         close_button = QPushButton("Zapri")
         close_button.clicked.connect(self.accept)
 
         button_layout = QHBoxLayout()
         button_layout.addStretch(1)
         button_layout.addWidget(self.update_button)
+        button_layout.addWidget(self.refresh_license_button)
         button_layout.addWidget(close_button)
 
         layout.addWidget(name_label)
@@ -156,6 +160,23 @@ class InfoDialog(QDialog):
                 self,
                 "Posodobitve",
                 f"Posodobitev ni bilo mogoče preveriti:\n{exc}",
+            )
+
+    def on_refresh_license(self) -> None:
+        try:
+            from betoncheck_customer.license_checker import load_license_key
+
+            license_key = load_license_key() or ""
+            QMessageBox.information(
+                self,
+                "Licenca ponovno naložena",
+                f"Licenčni ključ:\n{license_key}",
+            )
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Licenca",
+                f"Licenčno datoteko ni bilo mogoče prebrati:\n{exc}",
             )
 
 
