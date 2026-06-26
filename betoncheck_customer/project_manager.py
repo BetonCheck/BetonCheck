@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .crypto_vault import decrypt_file, encrypt_file
-from .module_manager import ModuleItem, ensure_downloaded
+from .module_manager import ModuleItem
 from .settings import PROJECTS_DIR, TEMP_DIR
 
 
@@ -24,6 +24,7 @@ class Calculation:
     name: str
     path: Path
     module_id: str
+    module_title: str
     item_id: str
     title: str
 
@@ -36,6 +37,13 @@ def slugify(text: str) -> str:
 
 
 def create_project(name: str) -> Project:
+    name = name.strip()
+
+    if not name:
+        raise ValueError("Ime projekta ne sme biti prazno.")
+
+    PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
+
     project_name = slugify(name)
     project_path = PROJECTS_DIR / project_name
 
@@ -93,6 +101,7 @@ def list_calculations(project: Project) -> list[Calculation]:
                 name=data.get("name", calc_dir.name),
                 path=calc_dir,
                 module_id=data["module_id"],
+                module_title=data.get("module_title", data["module_id"]),
                 item_id=data["item_id"],
                 title=data.get("title", calc_dir.name),
             )
@@ -107,7 +116,9 @@ def generate_calculation_name(project: Project, item: ModuleItem) -> str:
         for calc in list_calculations(project)
         if calc.item_id == item.item_id
     ]
+
     default_number = len(existing) + 1
+
     return f"{default_number} - {item.title}"
 
 
@@ -126,11 +137,14 @@ def create_calculation_from_template(
     work_file = calc_dir / "calculation.bckwork"
     metadata_file = calc_dir / "metadata.json"
     reports_dir = calc_dir / "reports"
+
     reports_dir.mkdir(exist_ok=True)
+    TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
     shutil.copy2(encrypted_template_path, template_file)
 
     temp_xlsx = TEMP_DIR / f"{calc_id}_template.xlsx"
+
     decrypt_file(template_file, temp_xlsx, module_key)
     encrypt_file(temp_xlsx, work_file, module_key)
 
@@ -162,6 +176,7 @@ def create_calculation_from_template(
         name=calculation_name,
         path=calc_dir,
         module_id=item.module_id,
+        module_title=item.module_title,
         item_id=item.item_id,
         title=item.title,
     )
@@ -169,10 +184,12 @@ def create_calculation_from_template(
 
 def reset_calculation(calculation: Calculation) -> None:
     metadata_file = calculation.path / "metadata.json"
+
     if not metadata_file.exists():
         raise FileNotFoundError("Manjka metadata datoteka za reset kontrole.")
 
     data = json.loads(metadata_file.read_text(encoding="utf-8"))
+
     template_file = calculation.path / data.get("template_file", "template.bckwork")
     work_file = calculation.path / data.get("work_file", "calculation.bckwork")
 
@@ -184,6 +201,11 @@ def reset_calculation(calculation: Calculation) -> None:
 
 
 def rename_calculation(calculation: Calculation, new_name: str) -> None:
+    new_name = new_name.strip()
+
+    if not new_name:
+        raise ValueError("Novo ime kontrole ne sme biti prazno.")
+
     metadata_file = calculation.path / "metadata.json"
 
     if not metadata_file.exists():
@@ -191,6 +213,8 @@ def rename_calculation(calculation: Calculation, new_name: str) -> None:
 
     data = json.loads(metadata_file.read_text(encoding="utf-8"))
     data["name"] = new_name
+    data["updated_at"] = datetime.now().isoformat(timespec="seconds")
+
     metadata_file.write_text(
         json.dumps(data, indent=2, ensure_ascii=False),
         encoding="utf-8",

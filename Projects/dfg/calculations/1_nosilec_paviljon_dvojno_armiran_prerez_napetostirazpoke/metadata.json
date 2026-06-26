@@ -1,0 +1,12 @@
+{
+  "name": "1 - nosilec_paviljon_dvojno armiran prerez_napetosti+razpoke",
+  "module_id": "beam_design",
+  "module_title": "Preračun nosilcev",
+  "item_id": "nosilec_paviljon_dvojno_armiran_prerez_napetostirazpoke",
+  "title": "nosilec_paviljon_dvojno armiran prerez_napetosti+razpoke",
+  "created_at": "2026-06-26T13:25:21",
+  "updated_at": "2026-06-26T13:25:55",
+  "work_file": "calculation.bckwork",
+  "template_file": "template.bckwork",
+  "reports_dir": "reports"
+}

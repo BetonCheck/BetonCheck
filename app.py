@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import json
 from pathlib import Path
 from typing import Any
 from datetime import date
@@ -29,7 +30,9 @@ from PySide6.QtWidgets import (
     QStyle,
     QFrame,
     QSplitter,
+    QHeaderView,
     QMenu,
+    QSizePolicy,
 )
 
 from betoncheck_customer.eula import has_accepted_eula, accept_eula
@@ -40,7 +43,13 @@ from betoncheck_customer.module_manager import (
     ModuleItem,
 )
 from betoncheck_customer.key_decryption import decrypt_module_key
-from betoncheck_customer.settings import APP_NAME, APP_VERSION, LAUNCHER_PRIVATE_KEY_PATH
+from betoncheck_customer.settings import (
+    APP_NAME,
+    APP_VERSION,
+    LAUNCHER_PRIVATE_KEY_PATH,
+    LOCAL_LICENSE_KEY_PATH,
+    PROJECTS_DIR,
+)
 from betoncheck_customer.updater import check_for_update
 from betoncheck_customer.project_manager import (
     Project,
@@ -55,6 +64,7 @@ from betoncheck_customer.project_manager import (
 )
 from betoncheck_customer.excel_session import (
     export_calculation_pdf,
+    export_calculation_pdf_from_saved,
     open_calculation_session,
     open_file as open_external_file,
     save_calculation_back,
@@ -203,10 +213,12 @@ class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("BetonCheck Engineering Center")
-        self.resize(980, 680)
+        self.setWindowTitle(APP_NAME)
+        self.resize(1464, 807)
+        self.setMinimumSize(1280, 640)
 
         self.license_result = None
+        self.active_license_key: str | None = None
         self.items: list[ModuleItem] = []
         self.module_keys: dict[str, str] = {}
 
@@ -218,55 +230,87 @@ class MainWindow(QWidget):
         self.save_icon = self.style().standardIcon(QStyle.SP_DialogSaveButton)
         self.export_icon = self.style().standardIcon(QStyle.SP_ArrowRight)
         self.opened_sessions: dict[str, Path] = {}
+        self.opened_sessions_seen_locked: set[str] = set()
+        self._close_dialog_in_progress = False
 
         self.license_input = QLineEdit(load_license_key() or "")
         self.license_input.setPlaceholderText("Licenčni ključ")
-        self.license_input.setMinimumWidth(320)
+        self.license_input.setMinimumWidth(440)
+        self.license_input.setMaximumWidth(650)
 
         self.license_status_label = QLabel("Licenca ni aktivirana")
-        self.license_status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.license_status_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.license_status_label.setMinimumWidth(145)
         self.license_status_label.setStyleSheet(
             "font-weight: bold; color: #d9534f;"
         )
 
         self.license_validity_label = QLabel("")
-        self.license_validity_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.license_validity_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.license_validity_label.setMinimumWidth(220)
         self.license_validity_label.setStyleSheet(
             "color: #444444;"
         )
 
         self.customer_label = QLabel("")
-        self.customer_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.customer_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.customer_label.setMinimumWidth(130)
         self.customer_label.setStyleSheet(
-            "font-weight: normal; color: #111111;"
+            "font-weight: bold; color: #111111;"
         )
 
         self.activate_btn = QPushButton("Aktiviraj")
+        self.activate_btn.setMinimumWidth(158)
         self.activate_btn.clicked.connect(self.activate)
 
         self.info_btn = QPushButton("Info")
+        self.info_btn.setMinimumWidth(112)
         self.info_btn.clicked.connect(self.show_info_dialog)
 
         self.new_project_btn = QPushButton("Nov projekt")
+        self.new_project_btn.setMinimumWidth(110)
         self.new_project_btn.clicked.connect(self.new_project)
 
         self.open_project_btn = QPushButton("Odpri projekt")
+        self.open_project_btn.setMinimumWidth(118)
         self.open_project_btn.clicked.connect(self.open_project_dialog)
 
         self.project_label = QLabel("Projekt: ni odprt")
+        self.project_label.setMinimumWidth(190)
+
+        self.generate_report_btn = QPushButton("Generiraj PDF")
+        self.generate_report_btn.setMinimumWidth(112)
+        self.generate_report_btn.clicked.connect(self.generate_report_pdfs)
+
+        self.intro_page_btn = QPushButton("Uvodna stran")
+        self.intro_page_btn.setMinimumWidth(120)
+        self.intro_page_btn.clicked.connect(self.edit_intro_page)
+
+        self.export_final_report_btn = QPushButton("Izvozi PDF")
+        self.export_final_report_btn.setMinimumWidth(112)
+        self.export_final_report_btn.clicked.connect(self.export_final_report_pdf)
 
         self.module_tree = QTreeWidget()
-        self.setup_tree(self.module_tree)
+        self.setup_tree(self.module_tree, 1)
+        self.module_tree.setEnabled(False)
         self.module_tree.itemClicked.connect(self.on_module_item_clicked)
         self.module_tree.itemDoubleClicked.connect(self.new_calculation_from_tree)
 
         self.project_tree = QTreeWidget()
-        self.setup_tree(self.project_tree)
+        self.setup_tree(self.project_tree, 1)
         self.project_tree.itemClicked.connect(self.on_project_tree_item_clicked)
         self.project_tree.itemDoubleClicked.connect(self.on_project_tree_double_clicked)
         self.project_tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.project_tree.customContextMenuRequested.connect(
             self.on_project_tree_context_menu
+        )
+
+        self.report_tree = QTreeWidget()
+        self.setup_tree(self.report_tree, 1)
+        self.report_tree.itemDoubleClicked.connect(self.on_report_item_double_clicked)
+        self.report_tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.report_tree.customContextMenuRequested.connect(
+            self.on_report_tree_context_menu
         )
 
         self.details_panel = QGroupBox("Podrobnosti")
@@ -303,17 +347,109 @@ class MainWindow(QWidget):
         self.context_layout.addWidget(self.context_recent_label)
 
         self.status_label = QLabel("Pripravljen")
+        self.status_label.setObjectName("StatusLabel")
         self.status_label.setFrameStyle(QFrame.Panel | QFrame.Sunken)
-        self.status_label.setStyleSheet("padding: 6px; background: #f8f8f8;")
+        self.status_label.setFixedHeight(44)
+        self.status_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.status_label.setStyleSheet(self.status_bar_style())
 
         self.status_timer = QTimer(self)
         self.status_timer.setSingleShot(True)
         self.status_timer.timeout.connect(self.reset_status_bar)
 
-        self.build_ui()
+        self.watch_excel_close_timer = QTimer(self)
+        self.watch_excel_close_timer.setInterval(1500)
+        self.watch_excel_close_timer.timeout.connect(self.check_opened_sessions)
+        self.watch_excel_close_timer.start()
 
-    def setup_tree(self, tree: QTreeWidget) -> None:
-        tree.setColumnCount(3)
+        self.apply_window_style()
+        self.build_ui()
+        self.license_input.textChanged.connect(self.on_license_input_changed)
+        if self.license_input.text().strip():
+            QTimer.singleShot(0, self.activate_saved_license)
+
+    def apply_window_style(self) -> None:
+        self.setFont(QFont("Segoe UI", 10))
+        self.setStyleSheet(
+            """
+            QWidget {
+                background: #f0f0f0;
+                color: #000000;
+                font-family: "Segoe UI";
+                font-size: 10pt;
+            }
+            QLineEdit {
+                background: #ffffff;
+                border: 1px solid #8f8f8f;
+                padding: 3px 5px;
+                min-height: 24px;
+            }
+            QPushButton {
+                background: #e9e9e9;
+                border: 1px solid #adadad;
+                border-radius: 0;
+                padding: 4px 12px;
+                min-height: 24px;
+            }
+            QPushButton:hover {
+                background: #e5f1fb;
+                border-color: #0078d7;
+            }
+            QPushButton:pressed {
+                background: #cce4f7;
+                border-color: #005a9e;
+            }
+            QGroupBox {
+                border: 1px solid #dddddd;
+                margin-top: 14px;
+                padding-top: 7px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 4px;
+                background: #f0f0f0;
+            }
+            QTreeWidget {
+                background: #ffffff;
+                border: 1px solid #9aa4b1;
+                outline: 0;
+                padding: 3px 0;
+            }
+            QTreeWidget::item {
+                min-height: 30px;
+            }
+            QTreeWidget::item:selected {
+                background: #e8e8e8;
+                color: #000000;
+            }
+            QSplitter::handle {
+                background: #f0f0f0;
+            }
+            QLabel#StatusLabel {
+                background: #fbfbfb;
+                color: #111111;
+                border: 1px solid #ffffff;
+                border-top: 2px groove #c7c7c7;
+                padding: 8px 14px;
+            }
+            """
+        )
+
+    def status_bar_style(self, error: bool = False) -> str:
+        if error:
+            return (
+                "padding: 8px 14px; background: #f8d7da; color: #721c24; "
+                "border: 1px solid #f5c6cb; border-top: 2px groove #c7c7c7;"
+            )
+
+        return (
+            "padding: 8px 14px; background: #fbfbfb; color: #111111; "
+            "border: 1px solid #ffffff; border-top: 2px groove #c7c7c7;"
+        )
+
+    def setup_tree(self, tree: QTreeWidget, columns: int = 3) -> None:
+        tree.setColumnCount(columns)
         tree.setHeaderHidden(True)
         tree.setRootIsDecorated(True)
         tree.setSelectionMode(QTreeWidget.SingleSelection)
@@ -321,59 +457,186 @@ class MainWindow(QWidget):
         tree.setAnimated(True)
         tree.setIndentation(20)
         tree.setExpandsOnDoubleClick(False)
+        tree.setTextElideMode(Qt.ElideNone)
+        tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
+
+        if columns > 1:
+            tree.header().setSectionResizeMode(1, QHeaderView.Fixed)
+            tree.setColumnWidth(1, 0)
+
+        if columns > 2:
+            tree.header().setSectionResizeMode(2, QHeaderView.Fixed)
+            tree.setColumnWidth(2, 100)
 
     def build_ui(self) -> None:
         root = QVBoxLayout(self)
+        root.setContentsMargins(14, 8, 14, 10)
+        root.setSpacing(7)
 
         license_layout = QHBoxLayout()
         license_layout.setContentsMargins(0, 0, 0, 0)
         license_layout.setSpacing(10)
         license_layout.addWidget(QLabel("Licence:"))
-        license_layout.addWidget(self.license_input)
+        license_layout.addWidget(self.license_input, 1)
         license_layout.addWidget(self.activate_btn)
-        license_layout.addStretch(1)
+        license_layout.addSpacing(10)
+        license_layout.addWidget(self.customer_label)
+        license_layout.addSpacing(16)
         license_layout.addWidget(self.license_status_label)
+        license_layout.addSpacing(16)
         license_layout.addWidget(self.license_validity_label)
         license_layout.addStretch(1)
-        license_layout.addWidget(self.customer_label)
 
-        toolbar = QHBoxLayout()
-        toolbar.setContentsMargins(0, 0, 0, 0)
-        toolbar.setSpacing(10)
-        toolbar.addWidget(self.info_btn)
-        toolbar.addStretch(1)
-        toolbar.addWidget(self.new_project_btn)
-        toolbar.addWidget(self.open_project_btn)
-        toolbar.addSpacing(20)
-        toolbar.addWidget(self.project_label)
+        top_panel = QWidget(self)
+        top_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        top_layout = QVBoxLayout(top_panel)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setSpacing(7)
+        top_layout.addLayout(license_layout)
 
         main_splitter = QSplitter(Qt.Horizontal, self)
+        main_splitter.setHandleWidth(8)
+        main_splitter.setChildrenCollapsible(False)
+        main_splitter.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         modules_group = QGroupBox("Razpoložljivi moduli")
         modules_layout = QVBoxLayout(modules_group)
+        modules_layout.setContentsMargins(14, 14, 14, 12)
         modules_layout.addWidget(self.module_tree)
 
         project_group = QGroupBox("Projekt")
         project_layout = QVBoxLayout(project_group)
-        project_layout.addWidget(self.project_label)
+        project_layout.setContentsMargins(14, 14, 14, 12)
         project_layout.addWidget(self.project_tree)
+
+        report_group = QGroupBox("Poročilo")
+        report_layout = QVBoxLayout(report_group)
+        report_layout.setContentsMargins(14, 14, 14, 12)
+        report_layout.addWidget(self.report_tree)
 
         main_splitter.addWidget(modules_group)
         main_splitter.addWidget(project_group)
+        main_splitter.addWidget(report_group)
         main_splitter.setStretchFactor(0, 3)
-        main_splitter.setStretchFactor(1, 7)
+        main_splitter.setStretchFactor(1, 4)
+        main_splitter.setStretchFactor(2, 4)
+        main_splitter.setSizes([430, 500, 500])
 
-        root.addLayout(license_layout)
-        root.addSpacing(4)
-        root.addLayout(toolbar)
-        root.addSpacing(6)
-        root.addWidget(main_splitter)
+        toolbar = QHBoxLayout()
+        toolbar.setContentsMargins(0, 0, 0, 0)
+        toolbar.setSpacing(8)
+
+        modules_toolbar = QWidget(self)
+        modules_toolbar_layout = QHBoxLayout(modules_toolbar)
+        modules_toolbar_layout.setContentsMargins(0, 0, 0, 0)
+        modules_toolbar_layout.setSpacing(8)
+        modules_toolbar_layout.addWidget(self.info_btn)
+        modules_toolbar_layout.addStretch(1)
+
+        project_toolbar = QWidget(self)
+        project_toolbar_layout = QHBoxLayout(project_toolbar)
+        project_toolbar_layout.setContentsMargins(0, 0, 0, 0)
+        project_toolbar_layout.setSpacing(8)
+        project_toolbar_layout.addStretch(1)
+        project_toolbar_layout.addWidget(self.new_project_btn)
+        project_toolbar_layout.addWidget(self.open_project_btn)
+        project_toolbar_layout.addWidget(self.project_label)
+        project_toolbar_layout.addStretch(1)
+
+        report_toolbar = QWidget(self)
+        report_toolbar_layout = QHBoxLayout(report_toolbar)
+        report_toolbar_layout.setContentsMargins(0, 0, 0, 0)
+        report_toolbar_layout.setSpacing(8)
+        report_toolbar_layout.addStretch(1)
+        report_toolbar_layout.addWidget(self.generate_report_btn)
+        report_toolbar_layout.addWidget(self.intro_page_btn)
+        report_toolbar_layout.addWidget(self.export_final_report_btn)
+
+        toolbar.addWidget(modules_toolbar, 3)
+        toolbar.addWidget(project_toolbar, 4)
+        toolbar.addWidget(report_toolbar, 4)
+        top_layout.addLayout(toolbar)
+
+        root.addWidget(top_panel)
+        root.addWidget(main_splitter, 1)
         root.addWidget(self.status_label)
 
-    def activate(self) -> None:
+    def activate_saved_license(self) -> None:
+        if not self.license_input.text().strip():
+            return
+
+        self.set_status_message("Preverjam shranjeno licenco ...")
+        self.activate()
+
+    def on_license_input_changed(self, text: str) -> None:
+        key = text.strip()
+
+        if (
+            key
+            and self.active_license_key == key
+            and self.license_result is not None
+            and self.license_result.valid
+        ):
+            return
+
+        had_access = (
+            self.active_license_key is not None
+            or bool(self.module_keys)
+            or bool(self.items)
+            or self.module_tree.topLevelItemCount() > 0
+        )
+
+        if not key or had_access:
+            self.clear_saved_license_key()
+
+        self.revoke_license_access()
+
+        if had_access:
+            if key:
+                self.set_status_message(
+                    "Licenca je bila spremenjena. Za dostop do modulov jo znova aktivirajte.",
+                    error=True,
+                )
+            else:
+                self.set_status_message(
+                    "Licenčni ključ je odstranjen. Moduli niso dostopni.",
+                    error=True,
+                )
+
+    def clear_saved_license_key(self) -> None:
         try:
-            result = check_license(self.license_input.text().strip())
+            LOCAL_LICENSE_KEY_PATH.unlink(missing_ok=True)
+        except OSError as exc:
+            self.set_status_message(
+                f"Shranjene licence ni bilo mogoče odstraniti: {exc}",
+                error=True,
+            )
+
+    def clear_module_access(self) -> None:
+        self.module_keys.clear()
+        self.items.clear()
+        self.module_tree.clear()
+        self.module_tree.setEnabled(False)
+        self.context_license_label.setText("Licenca: ni aktivirana")
+
+    def revoke_license_access(self, result: LicenseResult | None = None) -> None:
+        self.active_license_key = None
+        self.license_result = result
+        self.clear_module_access()
+        self.set_license_status(result)
+
+    def activate(self) -> None:
+        license_key = self.license_input.text().strip()
+        if not license_key:
+            self.clear_saved_license_key()
+            self.revoke_license_access()
+            self.set_status_message("Licenčni ključ ni vpisan.", error=True)
+            return
+
+        try:
+            result = check_license(license_key)
         except Exception as exc:
+            self.revoke_license_access()
             QMessageBox.critical(
                 self,
                 "Licenca",
@@ -385,13 +648,14 @@ class MainWindow(QWidget):
         self.license_result = result
 
         if not result.valid:
-            self.set_license_status(result)
+            self.revoke_license_access(result)
             self.set_status_message(result.message, error=True)
             return
 
         try:
             self.module_keys = self.extract_module_keys(result.modules or {})
         except Exception as exc:
+            self.revoke_license_access()
             QMessageBox.critical(
                 self,
                 "Licenca",
@@ -403,7 +667,9 @@ class MainWindow(QWidget):
             )
             return
 
+        self.active_license_key = result.key or license_key
         self.set_license_status(result)
+        self.context_license_label.setText("Licenca: aktivirana")
         self.set_status_message("Licenca uspešno aktivirana.")
         self.load_items(list(self.module_keys.keys()))
 
@@ -429,7 +695,7 @@ class MainWindow(QWidget):
             color = "#f0ad4e"
             message = f"Velja do: {result.valid_until} (poteka kmalu)"
         else:
-            color = "#5cb85c"
+            color = "#35b64b"
             message = f"Velja do: {result.valid_until}"
 
         self.license_status_label.setStyleSheet(
@@ -457,8 +723,6 @@ class MainWindow(QWidget):
                 return
 
             open_action = menu.addAction("Odpri")
-            save_action = menu.addAction("Shrani")
-            export_action = menu.addAction("Izvozi PDF")
             rename_action = menu.addAction("Preimenuj")
             delete_action = menu.addAction("Izbriši")
 
@@ -467,33 +731,12 @@ class MainWindow(QWidget):
                 module_key = self.module_keys.get(calculation.module_id)
                 if module_key:
                     self.open_calculation_with_dialog(calculation, module_key)
-            elif selected_action == save_action:
-                self.save_calculation_item(calculation)
-            elif selected_action == export_action:
-                self.export_calculation_pdf_item(calculation)
             elif selected_action == rename_action:
                 self.rename_calculation(calculation)
             elif selected_action == delete_action:
                 self.delete_calculation(calculation)
             return
 
-        if item_type == "project_report_pdf":
-            path_str = data.get("path")
-            if not path_str:
-                return
-
-            open_action = menu.addAction("Odpri")
-            folder_action = menu.addAction("Pokaži v mapi")
-            delete_action = menu.addAction("Izbriši")
-
-            selected_action = menu.exec(self.project_tree.viewport().mapToGlobal(position))
-            if selected_action == open_action:
-                self.open_file(Path(path_str))
-            elif selected_action == folder_action:
-                self.open_folder(Path(path_str).parent)
-            elif selected_action == delete_action:
-                self.delete_pdf_file(Path(path_str))
-            return
 
     def rename_calculation(self, calculation: Calculation) -> None:
         new_name, ok = QInputDialog.getText(
@@ -568,6 +811,7 @@ class MainWindow(QWidget):
 
     def load_items(self, modules: list[str]) -> None:
         self.module_tree.clear()
+        self.module_tree.setEnabled(True)
         self.items = available_items(modules)
 
         modules_by_id: dict[str, QTreeWidgetItem] = {}
@@ -683,25 +927,56 @@ class MainWindow(QWidget):
             "Ime projekta:",
         )
 
-        if not ok or not name.strip():
+        if not ok:
+            return
+
+        name = name.strip()
+
+        if not name:
+            QMessageBox.warning(
+                self,
+                "Projekt",
+                "Ime projekta ne sme biti prazno.",
+            )
             return
 
         try:
-            self.current_project = create_project(name.strip())
+            try:
+                self.current_project = create_project(name)
+            except TypeError as exc:
+                if "'NoneType' object is not iterable" not in str(exc):
+                    raise
+
+                self.current_project = create_project(
+                    name=name,
+                    calculations=[],
+                )
+
+            if self.current_project is None:
+                raise RuntimeError("Funkcija create_project je vrnila None.")
+
             self.project_label.setText(f"Projekt: {self.current_project.name}")
             self.refresh_project_tree()
+            self.refresh_report_tree()
             self.set_status_message(f"Projekt '{self.current_project.name}' ustvarjen.")
+
         except Exception as exc:
             QMessageBox.critical(
                 self,
                 "Projekt",
                 f"Projekta ni bilo mogoče ustvariti:\n{exc}",
             )
+            self.set_status_message(
+                f"Projekta ni bilo mogoče ustvariti: {exc}",
+                error=True,
+            )
 
     def open_project_dialog(self) -> None:
+        PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
         path = QFileDialog.getExistingDirectory(
             self,
             "Odpri BetonCheck projekt",
+            str(PROJECTS_DIR),
         )
 
         if not path:
@@ -711,6 +986,7 @@ class MainWindow(QWidget):
             self.current_project = open_project(Path(path))
             self.project_label.setText(f"Projekt: {self.current_project.name}")
             self.refresh_project_tree()
+            self.refresh_report_tree()
             self.set_status_message(f"Projekt '{self.current_project.name}' odprt.")
         except Exception as exc:
             QMessageBox.critical(
@@ -731,7 +1007,8 @@ class MainWindow(QWidget):
 
         project_root = QTreeWidgetItem([self.current_project.name, "", ""])
         project_root.setIcon(0, self.folder_icon)
-        project_root.setExpanded(True)
+        project_key = f"project_root:{project_root.text(0)}"
+        project_root.setExpanded(project_key in expanded_keys or not expanded_keys)
         project_root.setFont(0, QFont("Segoe UI", 11, QFont.Bold))
         project_root.setData(0, Qt.UserRole, {"type": "project_root"})
         self.project_tree.addTopLevelItem(project_root)
@@ -742,9 +1019,11 @@ class MainWindow(QWidget):
             module_parent = modules_by_id.get(calculation.module_id)
 
             if module_parent is None:
-                module_parent = QTreeWidgetItem([calculation.module_id, "", ""])
+                module_title = getattr(calculation, "module_title", calculation.module_id)
+                module_parent = QTreeWidgetItem([module_title, "", ""])
                 module_parent.setIcon(0, self.folder_icon)
-                module_parent.setExpanded(True)
+                module_key = f"project_module:{module_title}"
+                module_parent.setExpanded(module_key in expanded_keys)
                 module_parent.setFont(0, QFont("Segoe UI", 10, QFont.Bold))
                 module_parent.setData(
                     0,
@@ -754,10 +1033,9 @@ class MainWindow(QWidget):
                 project_root.addChild(module_parent)
                 modules_by_id[calculation.module_id] = module_parent
 
-            child = QTreeWidgetItem([calculation.name, "", ""])
+            child = QTreeWidgetItem([calculation.name])
             child.setIcon(0, self.file_icon)
-            child.setIcon(1, self.save_icon)
-            child.setIcon(2, self.export_icon)
+            child.setToolTip(0, calculation.name)
             child.setData(
                 0,
                 Qt.UserRole,
@@ -766,8 +1044,6 @@ class MainWindow(QWidget):
                     "index": index,
                 },
             )
-            child.setData(1, Qt.UserRole, {"action": "save"})
-            child.setData(2, Qt.UserRole, {"action": "export_pdf"})
             module_parent.addChild(child)
 
         self.context_project_label.setText(f"Projekt: {self.current_project.name}")
@@ -777,8 +1053,6 @@ class MainWindow(QWidget):
         self.context_recent_label.setText(
             f"Nedavne kontrole: {len(self.calculations)}"
         )
-
-        self.add_project_reports_tree(project_root, expanded_keys)
 
     def new_calculation_from_tree(
         self,
@@ -839,39 +1113,296 @@ class MainWindow(QWidget):
                 error=True,
             )
 
-    def add_project_reports_tree(self, project_root: QTreeWidgetItem, expanded_keys: set[str]) -> None:
-        reports_root = QTreeWidgetItem(["Reports", "", ""])
-        reports_root.setIcon(0, self.folder_icon)
-        reports_root.setExpanded(f"project_reports:{reports_root.text(0)}" in expanded_keys)
-        reports_root.setData(0, Qt.UserRole, {"type": "project_reports_root"})
-        project_root.addChild(reports_root)
+    def refresh_report_tree(self) -> None:
+        self.report_tree.clear()
 
-        reports_base = self.current_project.path / "reports"
-        if not reports_base.exists():
+        if self.current_project is None:
             return
 
-        for module_dir in sorted(p for p in reports_base.iterdir() if p.is_dir()):
-            module_node = QTreeWidgetItem([module_dir.name, "", ""])
-            module_node.setIcon(0, self.folder_icon)
-            module_node.setExpanded(f"project_reports_module:{module_dir.name}" in expanded_keys)
-            module_node.setData(0, Qt.UserRole, {"type": "project_reports_module", "module_id": module_dir.name})
-            reports_root.addChild(module_node)
+        reports_dir = self.current_project.path / "reports"
+        if not reports_dir.exists():
+            return
 
-            for pdf_file in sorted(module_dir.iterdir()):
-                if pdf_file.suffix.lower() != ".pdf":
+        intro_path = reports_dir / "00_uvodna_stran.pdf"
+        if intro_path.exists():
+            item = QTreeWidgetItem([intro_path.name])
+            item.setIcon(0, self.file_icon)
+            item.setData(
+                0,
+                Qt.UserRole,
+                {
+                    "type": "report_pdf",
+                    "path": str(intro_path),
+                },
+            )
+            self.report_tree.addTopLevelItem(item)
+
+        pdf_files = sorted(
+            p
+            for p in reports_dir.rglob("*.pdf")
+            if p.name not in {"00_uvodna_stran.pdf", "koncno_porocilo.pdf"}
+        )
+
+        for pdf_file in pdf_files:
+            item = QTreeWidgetItem([pdf_file.relative_to(reports_dir).as_posix()])
+            item.setIcon(0, self.file_icon)
+            item.setData(
+                0,
+                Qt.UserRole,
+                {
+                    "type": "report_pdf",
+                    "path": str(pdf_file),
+                },
+            )
+            self.report_tree.addTopLevelItem(item)
+
+    def on_report_item_double_clicked(self, item: QTreeWidgetItem, column: int) -> None:
+        data = item.data(0, Qt.UserRole) or {}
+        if data.get("type") != "report_pdf":
+            return
+
+        path = data.get("path")
+        if path:
+            self.open_file(Path(path))
+
+    def on_report_tree_context_menu(self, position) -> None:
+        item = self.report_tree.itemAt(position)
+        if item is None:
+            return
+
+        data = item.data(0, Qt.UserRole) or {}
+        if data.get("type") != "report_pdf":
+            return
+
+        path_str = data.get("path")
+        if not path_str:
+            return
+
+        menu = QMenu(self)
+        open_action = menu.addAction("Odpri")
+        folder_action = menu.addAction("Pokaži v mapi")
+        delete_action = menu.addAction("Izbriši")
+
+        selected_action = menu.exec(self.report_tree.viewport().mapToGlobal(position))
+        if selected_action == open_action:
+            self.open_file(Path(path_str))
+        elif selected_action == folder_action:
+            self.open_folder(Path(path_str).parent)
+        elif selected_action == delete_action:
+            self.delete_pdf_file(Path(path_str))
+
+    def generate_report_pdfs(self) -> None:
+        if self.current_project is None:
+            self.set_status_message("Najprej odprite projekt.", error=True)
+            return
+
+        if not self.calculations:
+            self.set_status_message("V projektu ni nobene kontrole.", error=True)
+            return
+
+        success_count = 0
+        errors: list[str] = []
+
+        for calculation in self.calculations:
+            module_key = self.module_keys.get(calculation.module_id)
+            if module_key is None:
+                errors.append(f"{calculation.name}: ni licenčnega ključa za modul.")
+                continue
+
+            calc_path = str(calculation.path)
+            temp_xlsx = self.opened_sessions.get(calc_path)
+
+            if temp_xlsx is not None and temp_xlsx.exists():
+                if self._is_file_locked(temp_xlsx):
+                    errors.append(f"{calculation.name}: Excel je zaklenjen. Zaprite ga in poskusite znova.")
                     continue
 
-                pdf_item = QTreeWidgetItem([pdf_file.name, "", ""])
-                pdf_item.setIcon(0, self.file_icon)
-                pdf_item.setData(
-                    0,
-                    Qt.UserRole,
-                    {
-                        "type": "project_report_pdf",
-                        "path": str(pdf_file),
-                    },
-                )
-                module_node.addChild(pdf_item)
+                try:
+                    export_calculation_pdf(calculation, temp_xlsx)
+                    success_count += 1
+                    continue
+                except Exception as exc:
+                    errors.append(f"{calculation.name}: {exc}")
+                    continue
+
+            try:
+                export_calculation_pdf_from_saved(calculation, module_key)
+                success_count += 1
+            except Exception as exc:
+                errors.append(f"{calculation.name}: {exc}")
+
+        self.refresh_report_tree()
+
+        message = f"Ustvarjenih PDF poročil: {success_count}, napak: {len(errors)}"
+        if errors:
+            warning_text = "\n".join(errors)
+            QMessageBox.warning(self, "Generiraj PDF", f"{message}\n\n{warning_text}")
+
+        self.set_status_message(message)
+
+    def edit_intro_page(self) -> None:
+        if self.current_project is None:
+            self.set_status_message("Najprej odprite projekt.", error=True)
+            return
+
+        reports_dir = self.current_project.path / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+
+        intro_file = reports_dir / "uvodna_stran.json"
+        intro_text = self._load_intro_text(intro_file)
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Uredi uvodno stran")
+        dialog.resize(640, 480)
+        layout = QVBoxLayout(dialog)
+
+        edit = QTextEdit()
+        edit.setPlainText(intro_text)
+
+        button_box = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        button_box.button(QDialogButtonBox.Save).setText("Shrani")
+        button_box.button(QDialogButtonBox.Cancel).setText("Prekliči")
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+
+        layout.addWidget(edit)
+        layout.addWidget(button_box)
+
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        try:
+            intro_file.write_text(
+                json.dumps({"content": edit.toPlainText()}, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            self.generate_intro_page_pdf()
+            self.refresh_report_tree()
+            self.set_status_message("Uvodna stran je bila posodobljena.")
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Uvodna stran",
+                f"Uvodne strani ni bilo mogoče shraniti:\n{exc}",
+            )
+
+    def _load_intro_text(self, intro_file: Path) -> str:
+        if intro_file.exists():
+            try:
+                data = json.loads(intro_file.read_text(encoding="utf-8"))
+                return data.get("content", "")
+            except Exception:
+                return intro_file.read_text(encoding="utf-8")
+
+        alternative = self.current_project.path / "reports" / "uvodna_stran.txt"
+        if alternative.exists():
+            return alternative.read_text(encoding="utf-8")
+
+        return (
+            "BETONCHECK POROČILO\n\n"
+            "Projekt:\n"
+            "Investitor:\n"
+            "Objekt:\n"
+            "Projektant:\n"
+            "Datum:\n"
+            "Opombe:\n"
+        )
+
+    def generate_intro_page_pdf(self) -> Path:
+        if self.current_project is None:
+            raise RuntimeError("Projekt ni odprt.")
+
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.pdfgen import canvas
+        except ImportError:
+            raise RuntimeError(
+                "Manjka knjižnica reportlab. Namestite jo z ukazom: pip install reportlab"
+            )
+
+        reports_dir = self.current_project.path / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        intro_file = reports_dir / "uvodna_stran.json"
+        intro_text = self._load_intro_text(intro_file)
+
+        output_pdf = reports_dir / "00_uvodna_stran.pdf"
+        c = canvas.Canvas(str(output_pdf), pagesize=A4)
+        width, height = A4
+        margin = 50
+
+        c.setFont("Helvetica-Bold", 24)
+        c.drawString(margin, height - margin, "BETONCHECK POROČILO")
+
+        c.setFont("Helvetica", 12)
+        y = height - margin - 40
+        c.drawString(margin, y, f"Projekt: {self.current_project.name}")
+        y -= 20
+        c.drawString(margin, y, f"Datum: {date.today().isoformat()}")
+        y -= 30
+
+        for line in intro_text.splitlines():
+            if y < margin + 20:
+                c.showPage()
+                y = height - margin
+                c.setFont("Helvetica", 12)
+            c.drawString(margin, y, line)
+            y -= 18
+
+        c.showPage()
+        c.save()
+
+        return output_pdf
+
+    def export_final_report_pdf(self) -> None:
+        if self.current_project is None:
+            self.set_status_message("Najprej odprite projekt.", error=True)
+            return
+
+        try:
+            from pypdf import PdfMerger
+        except ImportError:
+            QMessageBox.critical(
+                self,
+                "Izvozi PDF",
+                "Manjka knjižnica pypdf. Namestite jo z ukazom: pip install pypdf",
+            )
+            return
+
+        reports_dir = self.current_project.path / "reports"
+        if not reports_dir.exists():
+            self.set_status_message("Mapa poročil ne obstaja.", error=True)
+            return
+
+        output_pdf = reports_dir / "koncno_porocilo.pdf"
+        merger = PdfMerger()
+
+        intro_path = reports_dir / "00_uvodna_stran.pdf"
+        if intro_path.exists():
+            merger.append(str(intro_path))
+
+        pdf_files = sorted(
+            p
+            for p in reports_dir.rglob("*.pdf")
+            if p.name not in {"00_uvodna_stran.pdf", "koncno_porocilo.pdf"}
+        )
+
+        for pdf_file in pdf_files:
+            merger.append(str(pdf_file))
+
+        try:
+            merger.write(str(output_pdf))
+            merger.close()
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Izvozi PDF",
+                f"Končnega poročila ni bilo mogoče ustvariti:\n{exc}",
+            )
+            return
+
+        self.refresh_report_tree()
+        self.set_status_message(f"Končno poročilo je bilo ustvarjeno: {output_pdf}")
+        self.open_file(output_pdf)
 
     def get_project_tree_expanded_state(self) -> set[str]:
         expanded_keys: set[str] = set()
@@ -914,17 +1445,6 @@ class MainWindow(QWidget):
         data = item.data(0, Qt.UserRole) or {}
         item_type = data.get("type")
 
-        if item_type == "calculation" and column == 1:
-            calculation = self.get_selected_calculation()
-            if calculation:
-                self.save_calculation_item(calculation)
-            return
-
-        if item_type == "calculation" and column == 2:
-            calculation = self.get_selected_calculation()
-            if calculation:
-                self.export_calculation_pdf_item(calculation)
-            return
 
         if item_type == "project_module":
             self.context_selected_label.setText(f"Projektni modul: {item.text(0)}")
@@ -950,44 +1470,10 @@ class MainWindow(QWidget):
             )
             return
 
-        if item_type == "report_root":
-            self.context_selected_label.setText("Mapa poročil")
-            self.details_title.setText("Poročila")
-            self.details_description.setText(
-                "Dvojni klik na datoteko poročila za odpiranje."
-            )
-            self.clear_details_info()
-            return
-
-        if item_type == "project_reports_module":
-            self.context_selected_label.setText(f"Poročila modula: {item.text(0)}")
-            self.details_title.setText(item.text(0))
-            self.details_description.setText(
-                "Dvojni klik odpre poročilo PDF."
-            )
-            self.clear_details_info()
-            return
-
-        if item_type == "project_report_pdf":
-            path_str = data.get("path")
-            self.context_selected_label.setText(f"Poročilo: {item.text(0)}")
-            self.details_title.setText(item.text(0))
-            self.details_description.setText(
-                "Dvojni klik odpre izbrano datoteko poročila."
-            )
-            self.set_details_info([f"Pot: {path_str}"])
-            return
 
     def set_status_message(self, message: str, error: bool = False, timeout: int = 5000) -> None:
         self.status_label.setText(message)
-        if error:
-            self.status_label.setStyleSheet(
-                "padding: 6px; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;"
-            )
-        else:
-            self.status_label.setStyleSheet(
-                "padding: 6px; background: #f8f8f8; color: #333333;"
-            )
+        self.status_label.setStyleSheet(self.status_bar_style(error))
 
         self.status_timer.start(timeout)
 
@@ -1032,12 +1518,6 @@ class MainWindow(QWidget):
                 )
             return
 
-        if item_type == "project_report_pdf":
-            path_str = data.get("path")
-            if not path_str:
-                return
-
-            self.open_file(Path(path_str))
 
     def open_file(self, path: Path) -> None:
         if not path.exists():
@@ -1051,7 +1531,17 @@ class MainWindow(QWidget):
 
     def reset_status_bar(self) -> None:
         self.status_label.setText("Pripravljen")
-        self.status_label.setStyleSheet("padding: 6px; background: #f8f8f8; color: #333333;")
+        self.status_label.setStyleSheet(self.status_bar_style())
+
+    def _is_file_locked(self, path: Path) -> bool:
+        if not path.exists():
+            return False
+
+        try:
+            with open(path, "r+b"):
+                return False
+        except OSError:
+            return True
 
     def open_calculation_with_dialog(
         self,
@@ -1059,18 +1549,111 @@ class MainWindow(QWidget):
         module_key: str,
     ) -> None:
         calc_path = str(calculation.path)
-        if calc_path in self.opened_sessions:
-            self.set_status_message(
-                f"Kontrola '{calculation.name}' je že odprta." 
-            )
-            return
+        temp_xlsx = self.opened_sessions.get(calc_path)
+
+        if temp_xlsx is not None:
+            if temp_xlsx.exists() and self._is_file_locked(temp_xlsx):
+                self.set_status_message(
+                    f"Kontrola '{calculation.name}' je že odprta v Excelu."
+                )
+                return
+            self.opened_sessions.pop(calc_path, None)
+            self.opened_sessions_seen_locked.discard(calc_path)
 
         temp_xlsx = open_calculation_session(calculation, module_key)
         self.opened_sessions[calc_path] = temp_xlsx
+        self.opened_sessions_seen_locked.discard(calc_path)
         self.set_status_message(
             f"Kontrola '{calculation.name}' je bila odprta v Excelu."
         )
-        self.refresh_project_tree()
+
+    def check_opened_sessions(self) -> None:
+        if self._close_dialog_in_progress or not self.opened_sessions:
+            return
+
+        for calc_path, temp_xlsx in list(self.opened_sessions.items()):
+            if not temp_xlsx.exists():
+                self.opened_sessions.pop(calc_path, None)
+                self.opened_sessions_seen_locked.discard(calc_path)
+                continue
+
+            if self._is_file_locked(temp_xlsx):
+                self.opened_sessions_seen_locked.add(calc_path)
+                continue
+
+            if calc_path not in self.opened_sessions_seen_locked:
+                continue
+
+            calculation = next(
+                (
+                    calc
+                    for calc in self.calculations
+                    if str(calc.path) == calc_path
+                ),
+                None,
+            )
+
+            if calculation is None:
+                continue
+
+            self._close_dialog_in_progress = True
+            try:
+                self._prompt_save_on_excel_close(calculation, temp_xlsx)
+            finally:
+                self._close_dialog_in_progress = False
+            return
+
+    def _prompt_save_on_excel_close(
+        self,
+        calculation: Calculation,
+        temp_xlsx: Path,
+    ) -> None:
+        message_box = QMessageBox(self)
+        message_box.setWindowTitle("Excel se je zaprl")
+        message_box.setText(
+            f"Excel je bil zaprt za kontrolo '{calculation.name}'.\n"
+            "Ali želite shraniti spremembe?"
+        )
+        save_button = message_box.addButton("Shrani", QMessageBox.AcceptRole)
+        cancel_button = message_box.addButton("Prekliči", QMessageBox.RejectRole)
+        message_box.setDefaultButton(save_button)
+        message_box.exec()
+
+        if message_box.clickedButton() == save_button:
+            module_key = self.module_keys.get(calculation.module_id)
+            if module_key is None:
+                QMessageBox.critical(
+                    self,
+                    "Licenca",
+                    f"Licenca ne vsebuje ključa za modul: {calculation.module_id}",
+                )
+                return
+
+            try:
+                save_calculation_back(calculation, module_key, temp_xlsx)
+                self.opened_sessions.pop(str(calculation.path), None)
+                self.opened_sessions_seen_locked.discard(str(calculation.path))
+                self.set_status_message(
+                    f"Kontrola '{calculation.name}' je bila shranjena po zaprtju Excela."
+                )
+                self.refresh_project_tree()
+            except Exception as exc:
+                QMessageBox.critical(
+                    self,
+                    "Shrani",
+                    f"Kontrolni datoteki ni bilo mogoče shraniti:\n{exc}",
+                )
+        else:
+            try:
+                temp_xlsx.unlink()
+            except (FileNotFoundError, PermissionError):
+                pass
+            self.opened_sessions.pop(str(calculation.path), None)
+            self.opened_sessions_seen_locked.discard(str(calculation.path))
+            self.set_status_message(
+                f"Spremembe za kontrolo '{calculation.name}' niso bile shranjene."
+            )
+            self.refresh_project_tree()
 
     def save_calculation_item(self, calculation: Calculation) -> None:
         module_key = self.module_keys.get(calculation.module_id)
@@ -1085,11 +1668,24 @@ class MainWindow(QWidget):
         calc_path = str(calculation.path)
         temp_xlsx = self.opened_sessions.get(calc_path)
         if temp_xlsx is None or not temp_xlsx.exists():
-            temp_xlsx = open_calculation_session(calculation, module_key)
-            self.opened_sessions[calc_path] = temp_xlsx
+            self.set_status_message(
+                "Najprej odprite kontrolo v Excelu, nato jo shranite.",
+                error=True,
+            )
+            return
+
+        if self._is_file_locked(temp_xlsx):
+            QMessageBox.information(
+                self,
+                "Shrani",
+                "Excel je odprt. Zaprite ali shranite datoteko v Excelu, nato ponovite Shrani.",
+            )
+            return
 
         try:
             save_calculation_back(calculation, module_key, temp_xlsx)
+            self.opened_sessions.pop(calc_path, None)
+            self.opened_sessions_seen_locked.discard(calc_path)
             self.set_status_message(f"Kontrola '{calculation.name}' je bila shranjena.")
         except Exception as exc:
             QMessageBox.critical(
@@ -1100,32 +1696,6 @@ class MainWindow(QWidget):
         finally:
             self.refresh_project_tree()
 
-    def export_calculation_pdf_item(self, calculation: Calculation) -> None:
-        module_key = self.module_keys.get(calculation.module_id)
-        if module_key is None:
-            QMessageBox.critical(
-                self,
-                "Licenca",
-                f"Licenca ne vsebuje ključa za modul: {calculation.module_id}",
-            )
-            return
-
-        calc_path = str(calculation.path)
-        temp_xlsx = self.opened_sessions.get(calc_path)
-        if temp_xlsx is None or not temp_xlsx.exists():
-            temp_xlsx = open_calculation_session(calculation, module_key)
-            self.opened_sessions[calc_path] = temp_xlsx
-
-        try:
-            pdf_path = export_calculation_pdf(calculation, temp_xlsx)
-            self.set_status_message(f"PDF je bil izvožen: {pdf_path}")
-            self.refresh_project_tree()
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Izvozi PDF",
-                f"PDF ni bilo mogoče izvoziti:\n{exc}",
-            )
 
     def open_project_folder(self) -> None:
         if self.current_project is None:
@@ -1162,7 +1732,7 @@ class MainWindow(QWidget):
         try:
             path.unlink()
             self.set_status_message(f"PDF '{path.name}' je bil izbrisan.")
-            self.refresh_project_tree()
+            self.refresh_report_tree()
         except Exception as exc:
             QMessageBox.critical(
                 self,
