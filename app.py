@@ -134,8 +134,8 @@ class InfoDialog(QDialog):
         self.update_button = QPushButton("Preveri posodobitve")
         self.update_button.clicked.connect(self.on_check_updates)
 
-        self.refresh_license_button = QPushButton("Preberi licenco")
-        self.refresh_license_button.clicked.connect(self.on_refresh_license)
+        self.terms_button = QPushButton("Pogoji uporabe")
+        self.terms_button.clicked.connect(self.on_show_terms)
 
         close_button = QPushButton("Zapri")
         close_button.clicked.connect(self.accept)
@@ -143,7 +143,7 @@ class InfoDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addStretch(1)
         button_layout.addWidget(self.update_button)
-        button_layout.addWidget(self.refresh_license_button)
+        button_layout.addWidget(self.terms_button)
         button_layout.addWidget(close_button)
 
         layout.addWidget(name_label)
@@ -162,22 +162,39 @@ class InfoDialog(QDialog):
                 f"Posodobitev ni bilo mogoče preveriti:\n{exc}",
             )
 
-    def on_refresh_license(self) -> None:
+    def on_show_terms(self) -> None:
         try:
-            from betoncheck_customer.license_checker import load_license_key
-
-            license_key = load_license_key() or ""
-            QMessageBox.information(
-                self,
-                "Licenca ponovno naložena",
-                f"Licenčni ključ:\n{license_key}",
-            )
+            with open("LICENSE.txt", "r", encoding="utf-8") as file:
+                terms = file.read()
+        except FileNotFoundError:
+            terms = "Pogoji uporabe niso najdeni."
         except Exception as exc:
             QMessageBox.critical(
                 self,
-                "Licenca",
-                f"Licenčno datoteko ni bilo mogoče prebrati:\n{exc}",
+                "Pogoji uporabe",
+                f"Pogojev uporabe ni bilo mogoče prebrati:\n{exc}",
             )
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Pogoji uporabe")
+        dialog.resize(700, 500)
+        layout = QVBoxLayout(dialog)
+
+        text = QTextEdit()
+        text.setReadOnly(True)
+        text.setPlainText(terms)
+
+        button_box = QDialogButtonBox(QDialogButtonBox.Close)
+        button_box.rejected.connect(dialog.reject)
+
+        layout.addWidget(text)
+        layout.addWidget(button_box)
+
+        dialog.exec()
+
+    def on_refresh_license(self) -> None:
+        pass
 
 
 class MainWindow(QWidget):
