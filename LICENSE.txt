@@ -108,7 +108,7 @@ Po prenehanju licence mora uporabnik nemudoma prenehati uporabljati Program.
 
 12. VELJAVNO PRAVO
 Za te licenčne pogoje velja pravo Republike Slovenije.
-Za vse spore, ki izhajajo iz teh pogojev ali uporabe Programa, je pristojno stvarno pristojno sodišče v Republiki Sloveniji, razen če veljavna zakonodaja določa drugače.
+Za vse spore, ki izhajajo iz teh pogojev ali uporabe Programa, je pristojno stvarno pristojno sodišče v Republiki Sloveniji.
 
 13. SPREJEM POGOJEV
 Z namestitvijo, aktivacijo ali uporabo Programa uporabnik potrjuje, da je te licenčne pogoje prebral, jih razumel in se z njimi v celoti strinja.
