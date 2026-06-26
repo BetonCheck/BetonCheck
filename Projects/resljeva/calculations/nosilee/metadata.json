@@ -1,0 +1,11 @@
+{
+  "name": "nosilee",
+  "module_id": "column_design",
+  "module_title": "Preračun stebrov",
+  "item_id": "interakcijski_msn_pravokotni_35_70kontrola_tdr",
+  "title": "interakcijski_MSN_pravokotni 35_70+kontrola TDR",
+  "created_at": "2026-06-26T10:20:59",
+  "updated_at": "2026-06-26T10:21:08",
+  "work_file": "calculation.bckwork",
+  "reports_dir": "reports"
+}

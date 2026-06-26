@@ -110,7 +110,4 @@ def ensure_downloaded(item: ModuleItem) -> Path:
 
     target.write_bytes(response.content)
 
-    print("Status: downloaded")
-    print("Saved to:", target)
-
     return target

@@ -1,0 +1,11 @@
+{
+  "name": "Nosilec1",
+  "module_id": "beam_design",
+  "module_title": "Preračun nosilcev",
+  "item_id": "msn_armatura",
+  "title": "MSN_Armatura",
+  "created_at": "2026-06-26T09:43:28",
+  "updated_at": "2026-06-26T09:44:37",
+  "work_file": "calculation.bckwork",
+  "reports_dir": "reports"
+}
