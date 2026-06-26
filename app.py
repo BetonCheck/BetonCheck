@@ -186,6 +186,7 @@ class InfoDialog(QDialog):
         text.setPlainText(terms)
 
         button_box = QDialogButtonBox(QDialogButtonBox.Close)
+        button_box.button(QDialogButtonBox.Close).setText("Zapri")
         button_box.rejected.connect(dialog.reject)
 
         layout.addWidget(text)
