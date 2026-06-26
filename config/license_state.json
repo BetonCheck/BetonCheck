@@ -1,0 +1,12 @@
+{
+  "license_key": "8K8O-BT5S-COCS-19XD",
+  "session_token": "TwO5LH4eGgfxhUAv4W2MBvbHMWty51bk0zkuL7qbWFcYxuFbi6MQ9hgMzG3aGu7o",
+  "customer_name": "Milan Hapok",
+  "valid_until": "2027-06-26",
+  "modules": {
+    "beam_design": {},
+    "column_design": {}
+  },
+  "last_success_utc": "2026-06-26T16:17:52.290507+00:00",
+  "device_id_hash": "ebb349cb0e49f180f83fc704d87b9414d64008c71a38c25b51792fd5316ee3a0"
+}

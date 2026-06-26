@@ -256,14 +256,9 @@ class MainWindow(QWidget):
             "font-weight: bold; color: #d9534f;"
         )
 
-        self.license_validity_label = QLabel("")
-        self.license_validity_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.license_validity_label.setMinimumWidth(180)
-        self.license_validity_label.setStyleSheet("color: #444444;")
-
         self.customer_label = QLabel("")
-        self.customer_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.customer_label.setMinimumWidth(130)
+        self.customer_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.customer_label.setMinimumWidth(220)
         self.customer_label.setStyleSheet(
             "font-weight: bold; color: #111111;"
         )
@@ -502,12 +497,9 @@ class MainWindow(QWidget):
         license_layout.addWidget(self.activate_btn)
         license_layout.addWidget(self.deactivate_btn)
         license_layout.addSpacing(10)
-        license_layout.addWidget(self.customer_label)
-        license_layout.addSpacing(16)
         license_layout.addWidget(self.license_status_label)
-        license_layout.addSpacing(16)
-        license_layout.addWidget(self.license_validity_label)
         license_layout.addStretch(1)
+        license_layout.addWidget(self.customer_label)
 
         top_panel = QWidget(self)
         top_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -716,16 +708,11 @@ class MainWindow(QWidget):
             self.license_status_label.setStyleSheet(
                 "font-weight: bold; color: #d9534f;"
             )
-            self.license_validity_label.setText("")
             self.customer_label.setText("")
             return
 
         self.license_status_label.setText("Licenca: aktivna")
         self.customer_label.setText(getattr(result, "customer", ""))
-        valid_until = getattr(result, "valid_until", None)
-        self.license_validity_label.setText(
-            f"Velja do: {valid_until}" if valid_until else ""
-        )
         self.license_status_label.setStyleSheet(
             "font-weight: bold; color: #35b64b;"
         )
