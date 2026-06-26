@@ -36,7 +36,15 @@ from PySide6.QtWidgets import (
 )
 
 from betoncheck_customer.eula import has_accepted_eula, accept_eula
-from betoncheck_customer.license_checker import check_license, load_license_key, LicenseResult
+from betoncheck_customer.license_checker import (
+    check_license,
+    deactivate_license,
+    heartbeat_license,
+    load_license_key,
+    LicenseResult,
+    REASON_ACTIVE_ELSEWHERE,
+    REASON_OFFLINE_GRACE_EXPIRED,
+)
 from betoncheck_customer.module_manager import (
     available_items,
     ensure_downloaded,
@@ -46,10 +54,12 @@ from betoncheck_customer.key_decryption import decrypt_module_key
 from betoncheck_customer.settings import (
     APP_NAME,
     APP_VERSION,
+    LICENSE_HEARTBEAT_INTERVAL_SECONDS,
     LAUNCHER_PRIVATE_KEY_PATH,
     LOCAL_LICENSE_KEY_PATH,
     PROJECTS_DIR,
 )
+from betoncheck_customer.license_state import clear_license_state
 from betoncheck_customer.updater import check_for_update
 from betoncheck_customer.project_manager import (
     Project,
@@ -248,10 +258,8 @@ class MainWindow(QWidget):
 
         self.license_validity_label = QLabel("")
         self.license_validity_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.license_validity_label.setMinimumWidth(220)
-        self.license_validity_label.setStyleSheet(
-            "color: #444444;"
-        )
+        self.license_validity_label.setMinimumWidth(180)
+        self.license_validity_label.setStyleSheet("color: #444444;")
 
         self.customer_label = QLabel("")
         self.customer_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
@@ -263,6 +271,11 @@ class MainWindow(QWidget):
         self.activate_btn = QPushButton("Aktiviraj")
         self.activate_btn.setMinimumWidth(158)
         self.activate_btn.clicked.connect(self.activate)
+
+        self.deactivate_btn = QPushButton("Deaktiviraj")
+        self.deactivate_btn.setMinimumWidth(120)
+        self.deactivate_btn.setEnabled(False)
+        self.deactivate_btn.clicked.connect(self.deactivate_current_device)
 
         self.info_btn = QPushButton("Info")
         self.info_btn.setMinimumWidth(112)
@@ -363,8 +376,15 @@ class MainWindow(QWidget):
         self.watch_excel_close_timer.timeout.connect(self.check_opened_sessions)
         self.watch_excel_close_timer.start()
 
+        self.license_heartbeat_timer = QTimer(self)
+        self.license_heartbeat_timer.setInterval(
+            LICENSE_HEARTBEAT_INTERVAL_SECONDS * 1000
+        )
+        self.license_heartbeat_timer.timeout.connect(self.check_license_heartbeat)
+
         self.apply_window_style()
         self.build_ui()
+        self.set_license_dependent_actions_enabled(False)
         self.license_input.textChanged.connect(self.on_license_input_changed)
         if self.license_input.text().strip():
             QTimer.singleShot(0, self.activate_saved_license)
@@ -480,6 +500,7 @@ class MainWindow(QWidget):
         license_layout.addWidget(QLabel("Licence:"))
         license_layout.addWidget(self.license_input, 1)
         license_layout.addWidget(self.activate_btn)
+        license_layout.addWidget(self.deactivate_btn)
         license_layout.addSpacing(10)
         license_layout.addWidget(self.customer_label)
         license_layout.addSpacing(16)
@@ -605,6 +626,7 @@ class MainWindow(QWidget):
                 )
 
     def clear_saved_license_key(self) -> None:
+        clear_license_state()
         try:
             LOCAL_LICENSE_KEY_PATH.unlink(missing_ok=True)
         except OSError as exc:
@@ -621,10 +643,22 @@ class MainWindow(QWidget):
         self.context_license_label.setText("Licenca: ni aktivirana")
 
     def revoke_license_access(self, result: LicenseResult | None = None) -> None:
+        self.license_heartbeat_timer.stop()
         self.active_license_key = None
         self.license_result = result
         self.clear_module_access()
+        self.set_license_dependent_actions_enabled(False)
         self.set_license_status(result)
+
+    def set_license_dependent_actions_enabled(self, enabled: bool) -> None:
+        self.deactivate_btn.setEnabled(enabled)
+        self.new_project_btn.setEnabled(enabled)
+        self.open_project_btn.setEnabled(enabled)
+        self.project_tree.setEnabled(enabled)
+        self.report_tree.setEnabled(enabled)
+        self.generate_report_btn.setEnabled(enabled)
+        self.intro_page_btn.setEnabled(enabled)
+        self.export_final_report_btn.setEnabled(enabled)
 
     def activate(self) -> None:
         license_key = self.license_input.text().strip()
@@ -673,6 +707,8 @@ class MainWindow(QWidget):
         self.context_license_label.setText("Licenca: aktivirana")
         self.set_status_message("Licenca uspešno aktivirana.")
         self.load_items(list(self.module_keys.keys()))
+        self.set_license_dependent_actions_enabled(True)
+        self.license_heartbeat_timer.start()
 
     def set_license_status(self, result: LicenseResult | None) -> None:
         if result is None or not result.valid:
@@ -686,23 +722,39 @@ class MainWindow(QWidget):
 
         self.license_status_label.setText("Licenca: aktivna")
         self.customer_label.setText(getattr(result, "customer", ""))
-        valid_until = date.fromisoformat(result.valid_until)
-        days_left = (valid_until - date.today()).days
-
-        if days_left < 0:
-            color = "#d9534f"
-            message = "Licenca potekla"
-        elif days_left <= 30:
-            color = "#f0ad4e"
-            message = f"Velja do: {result.valid_until} (poteka kmalu)"
-        else:
-            color = "#35b64b"
-            message = f"Velja do: {result.valid_until}"
-
-        self.license_status_label.setStyleSheet(
-            f"font-weight: bold; color: {color};"
+        valid_until = getattr(result, "valid_until", None)
+        self.license_validity_label.setText(
+            f"Velja do: {valid_until}" if valid_until else ""
         )
-        self.license_validity_label.setText(message)
+        self.license_status_label.setStyleSheet(
+            "font-weight: bold; color: #35b64b;"
+        )
+
+    def check_license_heartbeat(self) -> None:
+        result = heartbeat_license()
+        if result.valid:
+            self.license_result = result
+            self.set_license_status(result)
+            return
+
+        if result.reason == REASON_ACTIVE_ELSEWHERE:
+            message = "Licenca je bila aktivirana na drugi napravi. Program bo zaklenjen."
+        elif result.reason == REASON_OFFLINE_GRACE_EXPIRED:
+            message = "Licence ni bilo mogoče preveriti. Povežite se z internetom."
+        else:
+            message = result.message or "Licenčna seja ni več veljavna. Program bo zaklenjen."
+
+        QMessageBox.warning(self, "Licenca", message)
+        self.revoke_license_access(result)
+        self.set_status_message(message, error=True)
+
+    def deactivate_current_device(self) -> None:
+        try:
+            deactivate_license()
+        finally:
+            self.clear_saved_license_key()
+            self.revoke_license_access()
+            self.set_status_message("Naprava je deaktivirana. Moduli niso dostopni.")
 
     def show_info_dialog(self) -> None:
         dialog = InfoDialog(self, self.license_result)
@@ -796,7 +848,7 @@ class MainWindow(QWidget):
         module_keys: dict[str, str] = {}
 
         for module_id, module_data in modules.items():
-            encrypted_key = module_data.get("encrypted_key")
+            encrypted_key = module_data.get("encrypted_key") or module_data.get("key")
 
             if not isinstance(encrypted_key, str) or not encrypted_key.strip():
                 continue

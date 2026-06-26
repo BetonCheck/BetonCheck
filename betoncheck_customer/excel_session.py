@@ -47,19 +47,28 @@ def _run_vbscript(script: str) -> None:
         mode="w",
         suffix=".vbs",
         delete=False,
-        encoding="utf-8",
+        encoding="utf-16",
     ) as script_file:
         script_file.write(script)
         temp_script_path = Path(script_file.name)
 
     try:
-        subprocess.check_call(
+        result = subprocess.run(
             [
                 "cscript",
                 "//NoLogo",
                 str(temp_script_path),
-            ]
+            ],
+            capture_output=True,
+            text=True,
         )
+        if result.returncode != 0:
+            details = "\n".join(
+                part.strip()
+                for part in (result.stdout, result.stderr)
+                if part.strip()
+            )
+            raise RuntimeError(details or f"VBScript ni uspel: {result.returncode}")
     finally:
         try:
             temp_script_path.unlink()
@@ -149,46 +158,54 @@ def export_calculation_pdf(
 
     try:
         script = f"""
-On Error Resume Next
-Set excelApp = GetObject(, "Excel.Application")
-If Err.Number <> 0 Then
-    Err.Clear
-    Set excelApp = CreateObject("Excel.Application")
-    createdNew = True
-Else
-    createdNew = False
-End If
+Set excelApp = Nothing
+Set workbook = Nothing
 
-excelApp.Visible = False
-excelApp.DisplayAlerts = False
+Sub FailIfError(stepName)
+    If Err.Number <> 0 Then
+        errorText = "ERROR at " & stepName & ": " & Err.Number & " - " & Err.Description
+        On Error Resume Next
+        If Not workbook Is Nothing Then
+            workbook.Close False
+        End If
+        If Not excelApp Is Nothing Then
+            excelApp.Quit
+        End If
+        WScript.Echo errorText
+        WScript.Quit 1
+    End If
+End Sub
 
-foundWorkbook = False
-
-Sub ApplyA4PageSetup(workbook)
-    For Each worksheet In workbook.Worksheets
+Sub ApplyA4PageSetup(targetWorkbook)
+    For Each worksheet In targetWorkbook.Worksheets
         worksheet.PageSetup.PaperSize = 9
+        FailIfError "PageSetup.PaperSize"
     Next
 End Sub
 
-For Each workbook In excelApp.Workbooks
-    If LCase(workbook.FullName) = LCase("{_escape_vb_string(str(export_temp))}") Then
-        ApplyA4PageSetup workbook
-        workbook.ExportAsFixedFormat 0, "{_escape_vb_string(str(pdf_path))}"
-        foundWorkbook = True
-        Exit For
-    End If
-Next
+On Error Resume Next
+Set excelApp = CreateObject("Excel.Application")
+FailIfError "CreateObject Excel.Application"
 
-If Not foundWorkbook Then
-    Set workbook = excelApp.Workbooks.Open("{_escape_vb_string(str(export_temp))}")
-    ApplyA4PageSetup workbook
-    workbook.ExportAsFixedFormat 0, "{_escape_vb_string(str(pdf_path))}"
-    workbook.Close False
-End If
+excelApp.Visible = False
+FailIfError "Excel.Visible"
 
-If createdNew Then
-    excelApp.Quit
-End If
+excelApp.DisplayAlerts = False
+FailIfError "Excel.DisplayAlerts"
+
+Set workbook = excelApp.Workbooks.Open("{_escape_vb_string(str(export_temp))}")
+FailIfError "Workbooks.Open"
+
+ApplyA4PageSetup workbook
+
+workbook.ExportAsFixedFormat 0, "{_escape_vb_string(str(pdf_path))}"
+FailIfError "ExportAsFixedFormat"
+
+workbook.Close False
+FailIfError "Workbook.Close"
+
+excelApp.Quit
+FailIfError "Excel.Quit"
 """
         _run_vbscript(script)
     finally:
