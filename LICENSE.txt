@@ -1,27 +1,147 @@
-BETONCHECK - LICENCNI POGOJI UPORABE
-
+BETONCHECK – LICENČNI POGOJI UPORABE (EULA)
 1. LICENCA
-Program BetonCheck je licencirana programska oprema. Uporabnik z nakupom ali prejemom licencnega kljuca pridobi neizkljucno, neprenosljivo pravico do uporabe programa v obsegu kupljene licence.
 
-2. OMEJITVE
-Brez pisnega dovoljenja avtorja ni dovoljeno kopiranje, nadaljnja distribucija, prodaja, oddajanje, spreminjanje, odstranjevanje zascite, dekompilacija, obratno inzenirstvo ali poskus pridobitve izvorne kode oziroma nezasifriranih modulov, razen kjer to izrecno dovoljuje veljavna zakonodaja.
+Program BetonCheck je avtorsko zaščitena programska oprema.
 
-3. LICENCNO PREVERJANJE
-Program lahko ob zagonu ali med uporabo preverja veljavnost licence preko internetne povezave. Licenca je lahko casovno omejena in lahko velja samo za izbrane module.
+Z nakupom ali pridobitvijo licenčnega ključa uporabnik pridobi omejeno, neizključno, neprenosljivo in preklicljivo pravico do uporabe programa v skladu s kupljenim licenčnim paketom.
 
-4. UPORABA NA LASTNO ODGOVORNOST
-Program je strokovno racunsko orodje. Uporabnik je dolzan preveriti vhodne podatke, rezultate, veljavne standarde, tehnicne predpise in projektantske odlocitve. Koncna odgovornost za projektno dokumentacijo, izracune in izvedene resitve je vedno na uporabniku oziroma odgovornem projektantu.
+Licenca ne predstavlja prodaje programa ali njegovih sestavnih delov.
 
-5. IZKLJUCITEV ODGOVORNOSTI
-V najvecjem obsegu, ki ga dovoljuje veljavna zakonodaja, avtor ne odgovarja za neposredno, posredno, materialno, nematerialno, posledicno ali kakrsnokoli drugo skodo, izgubo podatkov, izgubo dobicka, napake v projektni dokumentaciji, zamude, stroske odprave napak ali skodo, nastalo zaradi uporabe ali nezmoznosti uporabe programa.
+2. OMEJITEV UPORABE
 
-6. INTELEKTUALNA LASTNINA
-Vsa izvorna koda, algoritmi, Excel predloge, zasnova, dokumentacija, grafika in drugi sestavni deli programa so avtorsko delo in ostanejo last avtorja. Nakup licence ne pomeni prenosa avtorskih ali lastninskih pravic.
+Licenca velja izključno za enega uporabnika oziroma za obseg, določen v kupljeni licenci.
 
-7. POSODOBITVE
-Avtor si pridruzuje pravico do sprememb, popravkov, izboljsav, odstranitve ali dodajanja funkcionalnosti ter sprememb licencnega sistema.
+Brez predhodnega pisnega soglasja avtorja ni dovoljeno:
 
-8. SPREJEM POGOJEV
-Z namestitvijo, zagonom ali uporabo programa uporabnik potrjuje, da je pogoje prebral, jih razumel in se z njimi strinja.
+uporabljati iste licence hkrati ali zaporedoma pri več uporabnikih;
+posojati, oddajati, prodajati ali prenašati licence tretjim osebam;
+omogočati dostopa do programa osebam brez veljavne licence;
+uporabljati programa preko skupnih uporabniških računov, terminalskih strežnikov ali podobnih sistemov z namenom obhoda licenčnih omejitev;
+odstranjevati ali spreminjati licenčnih zaščit.
 
-© 2026 BetonCheck. Vse pravice pridrzane.
+Vsak uporabnik mora imeti svojo veljavno licenco, razen če je s pogodbo določeno drugače.
+
+3. PREPOVED RAZMNOŽEVANJA EXCEL PREDLOG
+
+Excel datoteke, predloge, makri, formule, algoritmi in vsi drugi spremljajoči materiali predstavljajo sestavni del programa BetonCheck.
+
+Brez izrecnega pisnega dovoljenja avtorja ni dovoljeno:
+
+kopiranje Excel datotek;
+razmnoževanje ali distribucija Excel predlog;
+uporaba Excel datotek izven programa BetonCheck;
+odpiranje, spreminjanje ali uporaba formul za druge programe;
+uporaba posameznih delov Excel rešitev v drugih projektih ali programih;
+izdelava novih rešitev, ki temeljijo na teh datotekah.
+4. PREPOVED OBRATNEGA INŽENIRSTVA
+
+Prepovedano je:
+
+dekompiliranje;
+razhroščevanje z namenom pridobitve izvorne kode;
+reverse engineering;
+odstranjevanje zaščite;
+spreminjanje izvršljivih datotek;
+prestrezanje komunikacije med programom in licenčnim strežnikom;
+izdelava ali uporaba programov za obhod licenčnega sistema.
+
+Prepoved velja v največjem obsegu, ki ga dovoljuje veljavna zakonodaja.
+
+5. LICENČNO PREVERJANJE
+
+Program lahko ob zagonu ali med uporabo samodejno preverja:
+
+veljavnost licence,
+različico programa,
+dovoljene module,
+število aktivacij,
+druge podatke, potrebne za izvajanje licenčnega sistema.
+
+Neveljavna ali preklicana licenca lahko povzroči omejitev ali onemogočanje uporabe programa.
+
+6. UPORABA NA LASTNO ODGOVORNOST
+
+Program predstavlja strokovno pomoč pri izračunih in projektiranju.
+
+Uporabnik mora sam preveriti:
+
+pravilnost vhodnih podatkov,
+rezultate izračunov,
+skladnost z veljavnimi standardi,
+skladnost z zakonodajo,
+ustreznost projektantskih rešitev.
+
+Končno strokovno odgovornost vedno nosi odgovorni projektant oziroma uporabnik.
+
+7. IZKLJUČITEV ODGOVORNOSTI
+
+V največjem obsegu, ki ga dovoljuje zakonodaja, avtor ne odgovarja za:
+
+napake v izračunih,
+izgubo podatkov,
+izgubo dobička,
+zamude pri projektih,
+stroške popravkov,
+poslovno škodo,
+posredno ali neposredno škodo,
+kakršnokoli drugo škodo, ki bi nastala zaradi uporabe ali nezmožnosti uporabe programa.
+
+Program je na voljo po načelu »takšen, kakršen je« ("AS IS"), brez kakršnihkoli izrecnih ali implicitnih jamstev.
+
+8. INTELEKTUALNA LASTNINA
+
+Vsa izvorna koda, algoritmi, izračuni, Excel predloge, makri, formule, dokumentacija, grafična podoba, uporabniški vmesnik, zbirke podatkov in ostali sestavni deli programa ostanejo izključna last avtorja.
+
+Nakup licence ne pomeni prenosa avtorskih, lastninskih ali drugih pravic intelektualne lastnine.
+
+9. POSODOBITVE
+
+Avtor si pridržuje pravico do:
+
+popravkov napak,
+sprememb algoritmov,
+sprememb uporabniškega vmesnika,
+sprememb licenčnega sistema,
+odstranitve ali dodajanja funkcionalnosti,
+spremembe vsebine posameznih modulov.
+10. KRŠITVE LICENCE
+
+V primeru ugotovljene kršitve teh pogojev lahko avtor brez predhodnega opozorila:
+
+začasno ali trajno prekliče licenco;
+onemogoči uporabo programa;
+prekliče vse aktivacije licence;
+blokira dostop do prihodnjih posodobitev;
+zahteva odstranitev vseh nepooblaščenih kopij programa.
+
+Če uporabnik uporablja eno licenco za več uporabnikov ali kako drugače preseže dovoljeni obseg uporabe, je dolžan poravnati licenčnino za vse dejanske uporabnike oziroma za celotno obdobje nepooblaščene uporabe po takrat veljavnem ceniku avtorja, poleg morebitne odškodninske odgovornosti po veljavni zakonodaji.
+
+11. REVIZIJA LICENCE
+
+Avtor lahko ob utemeljenem sumu zlorabe licence od uporabnika zahteva podatke oziroma dokazila, potrebna za preverjanje skladnosti uporabe licence.
+
+Če uporabnik preverjanja neupravičeno zavrne ali onemogoča njegovo izvedbo, lahko avtor licenco začasno ali trajno prekliče.
+
+12. PRENEHANJE LICENCE
+
+Licenca preneha:
+
+z iztekom časovno omejene licence,
+z odpovedjo uporabnika,
+z ugotovljeno hujšo kršitvijo teh pogojev,
+z neplačilom licence ali naročnine,
+s preklicem licence zaradi zlorabe.
+
+Po prenehanju licence mora uporabnik prenehati uporabljati program ter odstraniti vse njegove kopije, če zakon ali pogodba ne določata drugače.
+
+13. VELJAVNO PRAVO
+
+Za razlago teh pogojev se uporablja pravo Republike Slovenije.
+
+Za reševanje sporov je pristojno stvarno pristojno sodišče v Republiki Sloveniji.
+
+14. SPREJEM POGOJEV
+
+Z namestitvijo, aktivacijo ali uporabo programa uporabnik potrjuje, da je te licenčne pogoje prebral, jih razumel in se z njimi strinja.
+
+© 2026 BetonCheck. Vse pravice pridržane.
