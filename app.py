@@ -50,13 +50,14 @@ from betoncheck_customer.project_manager import (
     list_calculations,
     create_calculation_from_template,
     generate_calculation_name,
-    reset_calculation,
     rename_calculation,
     delete_calculation,
 )
 from betoncheck_customer.excel_session import (
+    export_calculation_pdf,
     open_calculation_session,
     open_file as open_external_file,
+    save_calculation_back,
 )
 
 
@@ -214,6 +215,9 @@ class MainWindow(QWidget):
 
         self.folder_icon = self.style().standardIcon(QStyle.SP_DirIcon)
         self.file_icon = self.style().standardIcon(QStyle.SP_FileIcon)
+        self.save_icon = self.style().standardIcon(QStyle.SP_DialogSaveButton)
+        self.export_icon = self.style().standardIcon(QStyle.SP_ArrowRight)
+        self.opened_sessions: dict[str, Path] = {}
 
         self.license_input = QLineEdit(load_license_key() or "")
         self.license_input.setPlaceholderText("Licenčni ključ")
@@ -309,7 +313,7 @@ class MainWindow(QWidget):
         self.build_ui()
 
     def setup_tree(self, tree: QTreeWidget) -> None:
-        tree.setColumnCount(1)
+        tree.setColumnCount(3)
         tree.setHeaderHidden(True)
         tree.setRootIsDecorated(True)
         tree.setSelectionMode(QTreeWidget.SingleSelection)
@@ -443,25 +447,53 @@ class MainWindow(QWidget):
             return
 
         data = item.data(0, Qt.UserRole) or {}
-        if data.get("type") != "calculation":
-            return
-
-        calculation = self.get_selected_calculation()
-        if calculation is None:
-            return
+        item_type = data.get("type")
 
         menu = QMenu(self)
-        rename_action = menu.addAction("Preimenuj")
-        reset_action = menu.addAction("Ponastavi kalkulacijo")
-        delete_action = menu.addAction("Izbriši")
 
-        selected_action = menu.exec(self.project_tree.viewport().mapToGlobal(position))
-        if selected_action == rename_action:
-            self.rename_calculation(calculation)
-        elif selected_action == reset_action:
-            self.reset_calculation(calculation)
-        elif selected_action == delete_action:
-            self.delete_calculation(calculation)
+        if item_type == "calculation":
+            calculation = self.get_selected_calculation()
+            if calculation is None:
+                return
+
+            open_action = menu.addAction("Odpri")
+            save_action = menu.addAction("Shrani")
+            export_action = menu.addAction("Izvozi PDF")
+            rename_action = menu.addAction("Preimenuj")
+            delete_action = menu.addAction("Izbriši")
+
+            selected_action = menu.exec(self.project_tree.viewport().mapToGlobal(position))
+            if selected_action == open_action:
+                module_key = self.module_keys.get(calculation.module_id)
+                if module_key:
+                    self.open_calculation_with_dialog(calculation, module_key)
+            elif selected_action == save_action:
+                self.save_calculation_item(calculation)
+            elif selected_action == export_action:
+                self.export_calculation_pdf_item(calculation)
+            elif selected_action == rename_action:
+                self.rename_calculation(calculation)
+            elif selected_action == delete_action:
+                self.delete_calculation(calculation)
+            return
+
+        if item_type == "project_report_pdf":
+            path_str = data.get("path")
+            if not path_str:
+                return
+
+            open_action = menu.addAction("Odpri")
+            folder_action = menu.addAction("Pokaži v mapi")
+            delete_action = menu.addAction("Izbriši")
+
+            selected_action = menu.exec(self.project_tree.viewport().mapToGlobal(position))
+            if selected_action == open_action:
+                self.open_file(Path(path_str))
+            elif selected_action == folder_action:
+                self.open_folder(Path(path_str).parent)
+            elif selected_action == delete_action:
+                self.delete_pdf_file(Path(path_str))
+            return
 
     def rename_calculation(self, calculation: Calculation) -> None:
         new_name, ok = QInputDialog.getText(
@@ -688,6 +720,7 @@ class MainWindow(QWidget):
             )
 
     def refresh_project_tree(self) -> None:
+        expanded_keys = self.get_project_tree_expanded_state()
         self.project_tree.clear()
         self.calculations = []
 
@@ -696,7 +729,7 @@ class MainWindow(QWidget):
 
         self.calculations = list_calculations(self.current_project)
 
-        project_root = QTreeWidgetItem([self.current_project.name])
+        project_root = QTreeWidgetItem([self.current_project.name, "", ""])
         project_root.setIcon(0, self.folder_icon)
         project_root.setExpanded(True)
         project_root.setFont(0, QFont("Segoe UI", 11, QFont.Bold))
@@ -709,7 +742,7 @@ class MainWindow(QWidget):
             module_parent = modules_by_id.get(calculation.module_id)
 
             if module_parent is None:
-                module_parent = QTreeWidgetItem([calculation.module_id])
+                module_parent = QTreeWidgetItem([calculation.module_id, "", ""])
                 module_parent.setIcon(0, self.folder_icon)
                 module_parent.setExpanded(True)
                 module_parent.setFont(0, QFont("Segoe UI", 10, QFont.Bold))
@@ -721,8 +754,10 @@ class MainWindow(QWidget):
                 project_root.addChild(module_parent)
                 modules_by_id[calculation.module_id] = module_parent
 
-            child = QTreeWidgetItem([calculation.name])
+            child = QTreeWidgetItem([calculation.name, "", ""])
             child.setIcon(0, self.file_icon)
+            child.setIcon(1, self.save_icon)
+            child.setIcon(2, self.export_icon)
             child.setData(
                 0,
                 Qt.UserRole,
@@ -731,38 +766,9 @@ class MainWindow(QWidget):
                     "index": index,
                 },
             )
+            child.setData(1, Qt.UserRole, {"action": "save"})
+            child.setData(2, Qt.UserRole, {"action": "export_pdf"})
             module_parent.addChild(child)
-
-            reports_root = QTreeWidgetItem(["Poročila"])
-            reports_root.setIcon(0, self.folder_icon)
-            reports_root.setData(
-                0,
-                Qt.UserRole,
-                {
-                    "type": "report_root",
-                    "calculation_index": index,
-                },
-            )
-            child.addChild(reports_root)
-            reports_root.setExpanded(False)
-
-            reports_dir = calculation.path / "reports"
-            if reports_dir.exists():
-                for report_file in sorted(reports_dir.iterdir()):
-                    if not report_file.is_file():
-                        continue
-
-                    report_item = QTreeWidgetItem([report_file.name])
-                    report_item.setIcon(0, self.file_icon)
-                    report_item.setData(
-                        0,
-                        Qt.UserRole,
-                        {
-                            "type": "report_file",
-                            "path": str(report_file),
-                        },
-                    )
-                    reports_root.addChild(report_item)
 
         self.context_project_label.setText(f"Projekt: {self.current_project.name}")
         self.context_license_label.setText(
@@ -771,6 +777,8 @@ class MainWindow(QWidget):
         self.context_recent_label.setText(
             f"Nedavne kontrole: {len(self.calculations)}"
         )
+
+        self.add_project_reports_tree(project_root, expanded_keys)
 
     def new_calculation_from_tree(
         self,
@@ -831,6 +839,56 @@ class MainWindow(QWidget):
                 error=True,
             )
 
+    def add_project_reports_tree(self, project_root: QTreeWidgetItem, expanded_keys: set[str]) -> None:
+        reports_root = QTreeWidgetItem(["Reports", "", ""])
+        reports_root.setIcon(0, self.folder_icon)
+        reports_root.setExpanded(f"project_reports:{reports_root.text(0)}" in expanded_keys)
+        reports_root.setData(0, Qt.UserRole, {"type": "project_reports_root"})
+        project_root.addChild(reports_root)
+
+        reports_base = self.current_project.path / "reports"
+        if not reports_base.exists():
+            return
+
+        for module_dir in sorted(p for p in reports_base.iterdir() if p.is_dir()):
+            module_node = QTreeWidgetItem([module_dir.name, "", ""])
+            module_node.setIcon(0, self.folder_icon)
+            module_node.setExpanded(f"project_reports_module:{module_dir.name}" in expanded_keys)
+            module_node.setData(0, Qt.UserRole, {"type": "project_reports_module", "module_id": module_dir.name})
+            reports_root.addChild(module_node)
+
+            for pdf_file in sorted(module_dir.iterdir()):
+                if pdf_file.suffix.lower() != ".pdf":
+                    continue
+
+                pdf_item = QTreeWidgetItem([pdf_file.name, "", ""])
+                pdf_item.setIcon(0, self.file_icon)
+                pdf_item.setData(
+                    0,
+                    Qt.UserRole,
+                    {
+                        "type": "project_report_pdf",
+                        "path": str(pdf_file),
+                    },
+                )
+                module_node.addChild(pdf_item)
+
+    def get_project_tree_expanded_state(self) -> set[str]:
+        expanded_keys: set[str] = set()
+
+        def walk(item: QTreeWidgetItem) -> None:
+            for i in range(item.childCount()):
+                child = item.child(i)
+                data = child.data(0, Qt.UserRole) or {}
+                item_type = data.get("type", "")
+                key = f"{item_type}:{child.text(0)}"
+                if child.isExpanded():
+                    expanded_keys.add(key)
+                walk(child)
+
+        walk(self.project_tree.invisibleRootItem())
+        return expanded_keys
+
     def get_selected_calculation(self) -> Calculation | None:
         item = self.project_tree.currentItem()
 
@@ -855,6 +913,18 @@ class MainWindow(QWidget):
     def on_project_tree_item_clicked(self, item: QTreeWidgetItem, column: int) -> None:
         data = item.data(0, Qt.UserRole) or {}
         item_type = data.get("type")
+
+        if item_type == "calculation" and column == 1:
+            calculation = self.get_selected_calculation()
+            if calculation:
+                self.save_calculation_item(calculation)
+            return
+
+        if item_type == "calculation" and column == 2:
+            calculation = self.get_selected_calculation()
+            if calculation:
+                self.export_calculation_pdf_item(calculation)
+            return
 
         if item_type == "project_module":
             self.context_selected_label.setText(f"Projektni modul: {item.text(0)}")
@@ -889,7 +959,16 @@ class MainWindow(QWidget):
             self.clear_details_info()
             return
 
-        if item_type == "report_file":
+        if item_type == "project_reports_module":
+            self.context_selected_label.setText(f"Poročila modula: {item.text(0)}")
+            self.details_title.setText(item.text(0))
+            self.details_description.setText(
+                "Dvojni klik odpre poročilo PDF."
+            )
+            self.clear_details_info()
+            return
+
+        if item_type == "project_report_pdf":
             path_str = data.get("path")
             self.context_selected_label.setText(f"Poročilo: {item.text(0)}")
             self.details_title.setText(item.text(0))
@@ -953,7 +1032,7 @@ class MainWindow(QWidget):
                 )
             return
 
-        if item_type == "report_file":
+        if item_type == "project_report_pdf":
             path_str = data.get("path")
             if not path_str:
                 return
@@ -979,11 +1058,74 @@ class MainWindow(QWidget):
         calculation: Calculation,
         module_key: str,
     ) -> None:
+        calc_path = str(calculation.path)
+        if calc_path in self.opened_sessions:
+            self.set_status_message(
+                f"Kontrola '{calculation.name}' je že odprta." 
+            )
+            return
+
         temp_xlsx = open_calculation_session(calculation, module_key)
+        self.opened_sessions[calc_path] = temp_xlsx
         self.set_status_message(
             f"Kontrola '{calculation.name}' je bila odprta v Excelu."
         )
         self.refresh_project_tree()
+
+    def save_calculation_item(self, calculation: Calculation) -> None:
+        module_key = self.module_keys.get(calculation.module_id)
+        if module_key is None:
+            QMessageBox.critical(
+                self,
+                "Licenca",
+                f"Licenca ne vsebuje ključa za modul: {calculation.module_id}",
+            )
+            return
+
+        calc_path = str(calculation.path)
+        temp_xlsx = self.opened_sessions.get(calc_path)
+        if temp_xlsx is None or not temp_xlsx.exists():
+            temp_xlsx = open_calculation_session(calculation, module_key)
+            self.opened_sessions[calc_path] = temp_xlsx
+
+        try:
+            save_calculation_back(calculation, module_key, temp_xlsx)
+            self.set_status_message(f"Kontrola '{calculation.name}' je bila shranjena.")
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Shrani",
+                f"Kontrolni datoteki ni bilo mogoče shraniti:\n{exc}",
+            )
+        finally:
+            self.refresh_project_tree()
+
+    def export_calculation_pdf_item(self, calculation: Calculation) -> None:
+        module_key = self.module_keys.get(calculation.module_id)
+        if module_key is None:
+            QMessageBox.critical(
+                self,
+                "Licenca",
+                f"Licenca ne vsebuje ključa za modul: {calculation.module_id}",
+            )
+            return
+
+        calc_path = str(calculation.path)
+        temp_xlsx = self.opened_sessions.get(calc_path)
+        if temp_xlsx is None or not temp_xlsx.exists():
+            temp_xlsx = open_calculation_session(calculation, module_key)
+            self.opened_sessions[calc_path] = temp_xlsx
+
+        try:
+            pdf_path = export_calculation_pdf(calculation, temp_xlsx)
+            self.set_status_message(f"PDF je bil izvožen: {pdf_path}")
+            self.refresh_project_tree()
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Izvozi PDF",
+                f"PDF ni bilo mogoče izvoziti:\n{exc}",
+            )
 
     def open_project_folder(self) -> None:
         if self.current_project is None:
@@ -992,19 +1134,41 @@ class MainWindow(QWidget):
         self.open_folder(self.current_project.path)
 
     def open_reports_folder(self) -> None:
-        calculation = self.get_selected_calculation()
-
-        if calculation is None:
+        if self.current_project is None:
             self.set_status_message(
-                "Izberite kontrolo, da odprete mapo s poročili.",
+                "Najprej odprite projekt.",
                 error=True,
             )
             return
 
-        reports_dir = calculation.path / "reports"
+        reports_dir = self.current_project.path / "reports"
         reports_dir.mkdir(exist_ok=True)
-
         self.open_folder(reports_dir)
+
+    def delete_pdf_file(self, path: Path) -> None:
+        if not path.exists():
+            self.set_status_message(f"Datoteka ni najdena: {path}", error=True)
+            return
+
+        confirm = QMessageBox.question(
+            self,
+            "Izbriši PDF",
+            f"Ali res želite izbrisati PDF '{path.name}'?",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        try:
+            path.unlink()
+            self.set_status_message(f"PDF '{path.name}' je bil izbrisan.")
+            self.refresh_project_tree()
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Napaka",
+                f"PDF ni bilo mogoče izbrisati:\n{exc}",
+            )
 
     def open_folder(self, path: Path) -> None:
         path.mkdir(parents=True, exist_ok=True)

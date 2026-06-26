@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 
 from .crypto_vault import decrypt_file, encrypt_file
-from .project_manager import Calculation, update_calculation_timestamp
+from .project_manager import Calculation, slugify, update_calculation_timestamp
 from .settings import TEMP_DIR
 
 
@@ -66,15 +66,63 @@ def open_calculation_session(
     return temp_xlsx
 
 
-def export_pdf_placeholder(
+def _escape_vb_string(text: str) -> str:
+    return text.replace('"', '""')
+
+
+def _run_vbscript(script: str) -> None:
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".vbs",
+        delete=False,
+        encoding="utf-8",
+    ) as script_file:
+        script_file.write(script)
+        temp_script_path = Path(script_file.name)
+
+    try:
+        subprocess.check_call([
+            "cscript",
+            "//NoLogo",
+            str(temp_script_path),
+        ])
+    finally:
+        try:
+            temp_script_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def export_calculation_pdf(
     calculation: Calculation,
+    temp_xlsx: Path,
 ) -> Path:
-    reports_dir = calculation.path / "reports"
-    reports_dir.mkdir(exist_ok=True)
+    if os.name != "nt":
+        raise NotImplementedError("PDF export is currently supported only on Windows.")
 
-    pdf_path = reports_dir / f"{calculation.path.name}.pdf"
+    if not temp_xlsx.exists():
+        raise FileNotFoundError(f"Začasna Excel datoteka ne obstaja: {temp_xlsx}")
 
-    raise NotImplementedError(
-        "PDF export bo dodan v naslednjem koraku. "
-        f"Predvidena pot: {pdf_path}"
-    )
+    reports_dir = calculation.project.path / "reports" / calculation.module_id
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    pdf_path = reports_dir / f"{slugify(calculation.name)}.pdf"
+
+    script = f"""
+Set excelApp = CreateObject("Excel.Application")
+excelApp.Visible = False
+excelApp.DisplayAlerts = False
+Set workbook = excelApp.Workbooks.Open("{_escape_vb_string(str(temp_xlsx))}")
+workbook.ExportAsFixedFormat 0, "{_escape_vb_string(str(pdf_path))}"
+workbook.Close False
+excelApp.Quit
+"""
+
+    _run_vbscript(script)
+
+    if not pdf_path.exists():
+        raise RuntimeError(f"PDF datoteka ni bila ustvarjena: {pdf_path}")
+
+    return pdf_path
